@@ -1,0 +1,30 @@
+[package]
+name = "tokemon"
+version = "0.1.0"
+edition = "2024"
+description = "Token Monitor — Terminal dashboard for monitoring AI coding tools (Claude Code, Codex, CodeBuddy)"
+license = "MIT"
+repository = "https://github.com/TtTRz/tokemon"
+authors = ["TtTRz"]
+keywords = ["tui", "monitor", "ai", "token", "dashboard"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures-lite = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+notify = "7"
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+anyhow = "1"
+shellexpand = "3"
