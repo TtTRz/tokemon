@@ -66,18 +66,27 @@ impl PricingEngine {
     }
 
     /// Estimate cost for a session snapshot (called at render time).
+    ///
+    /// `input_tokens` is the total input count (including cached portions).
+    /// We subtract cache tokens to avoid double-counting, then price each
+    /// bucket at its own rate. If no cache-specific pricing is configured,
+    /// cached tokens fall back to the regular input rate.
     pub fn estimate_cost(&self, snapshot: &SessionSnapshot) -> f64 {
         let pricing = self.get_price(&snapshot.model);
-        let input_cost = snapshot.input_tokens as f64 * pricing.input_per_mtok / 1_000_000.0;
+
+        let total_cached = snapshot.cache_creation_tokens + snapshot.cache_read_tokens;
+        let non_cached_input = snapshot.input_tokens.saturating_sub(total_cached);
+
+        let input_cost = non_cached_input as f64 * pricing.input_per_mtok / 1_000_000.0;
         let output_cost = snapshot.output_tokens as f64 * pricing.output_per_mtok / 1_000_000.0;
-        let cache_write_cost = pricing
-            .cache_write_per_mtok
-            .map(|p| snapshot.cache_creation_tokens as f64 * p / 1_000_000.0)
-            .unwrap_or(0.0);
-        let cache_read_cost = pricing
-            .cache_read_per_mtok
-            .map(|p| snapshot.cache_read_tokens as f64 * p / 1_000_000.0)
-            .unwrap_or(0.0);
+        let cache_write_cost = snapshot.cache_creation_tokens as f64
+            * pricing
+                .cache_write_per_mtok
+                .unwrap_or(pricing.input_per_mtok)
+            / 1_000_000.0;
+        let cache_read_cost = snapshot.cache_read_tokens as f64
+            * pricing.cache_read_per_mtok.unwrap_or(0.0)
+            / 1_000_000.0;
         input_cost + output_cost + cache_write_cost + cache_read_cost
     }
 
@@ -126,6 +135,24 @@ impl PricingEngine {
                 output_per_mtok: 8.0,
                 cache_write_per_mtok: None,
                 cache_read_per_mtok: None,
+            },
+        );
+        m.insert(
+            "glm-5".into(),
+            ModelPricing {
+                input_per_mtok: 1.4,
+                output_per_mtok: 4.4,
+                cache_write_per_mtok: None,
+                cache_read_per_mtok: Some(0.475),
+            },
+        );
+        m.insert(
+            "glm-5.1".into(),
+            ModelPricing {
+                input_per_mtok: 1.4,
+                output_per_mtok: 4.4,
+                cache_write_per_mtok: None,
+                cache_read_per_mtok: Some(0.475),
             },
         );
         m
