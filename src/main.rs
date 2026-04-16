@@ -20,6 +20,7 @@ use crate::collector::Collector;
 use crate::config::Config;
 use crate::pricing::PricingEngine;
 use crate::provider::claude_code::ClaudeCodeProvider;
+use crate::provider::code_buddy::CodeBuddyProvider;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -86,6 +87,13 @@ async fn main() -> anyhow::Result<()> {
             config.providers.claude_code.log_dirs.clone(),
         );
         collector.register(Box::new(cc));
+    }
+    if config.providers.code_buddy.enabled {
+        let cb = CodeBuddyProvider::new(
+            config.providers.code_buddy.socket_path.clone(),
+            config.providers.code_buddy.log_dirs.clone(),
+        );
+        collector.register(Box::new(cb));
     }
 
     let mut collector_rx = collector.take_event_rx().expect("event rx already taken");

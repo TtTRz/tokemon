@@ -1,3 +1,4 @@
+use chrono::Local;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -108,7 +109,11 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 dir.to_string()
             };
-            let time = s.timestamp.format("%m-%d %H:%M").to_string();
+            let time = s
+                .timestamp
+                .with_timezone(&Local)
+                .format("%m-%d %H:%M")
+                .to_string();
 
             let style = if i == app.history_selected {
                 Style::default().fg(TEXT).add_modifier(Modifier::BOLD)

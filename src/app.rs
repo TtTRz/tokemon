@@ -239,9 +239,9 @@ impl App {
                     self.alerts = new_alerts;
                 }
 
-                // Upsert session
+                // Upsert session (merge to preserve richer fields from statusline)
                 if let Some(existing) = self.sessions.iter_mut().find(|s| s.session_id == sid) {
-                    *existing = *snapshot;
+                    existing.merge(&snapshot);
                 } else {
                     self.sessions.push(*snapshot);
                 }

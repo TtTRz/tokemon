@@ -51,3 +51,4 @@ pub trait Provider: Send + Sync {
 }
 
 pub mod claude_code;
+pub mod code_buddy;

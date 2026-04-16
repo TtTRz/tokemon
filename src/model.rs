@@ -24,6 +24,58 @@ pub struct SessionSnapshot {
     pub timestamp: DateTime<Utc>,
 }
 
+impl SessionSnapshot {
+    /// Merge another snapshot into self. The incoming snapshot updates
+    /// cumulative counters (always picks the higher value) and fills in
+    /// `Option` fields only when the new value is `Some` — this prevents
+    /// a less-rich source (e.g. JSONL logs) from wiping out richer data
+    /// (e.g. statusline with context_pct / cost / tps).
+    pub fn merge(&mut self, other: &SessionSnapshot) {
+        // Always take the newer timestamp
+        if other.timestamp > self.timestamp {
+            self.timestamp = other.timestamp;
+            self.status = other.status;
+        }
+
+        // Cumulative counters: pick whichever is larger
+        self.input_tokens = self.input_tokens.max(other.input_tokens);
+        self.output_tokens = self.output_tokens.max(other.output_tokens);
+        self.cache_creation_tokens = self.cache_creation_tokens.max(other.cache_creation_tokens);
+        self.cache_read_tokens = self.cache_read_tokens.max(other.cache_read_tokens);
+
+        // Model: prefer non-empty
+        if !other.model.is_empty() {
+            self.model.clone_from(&other.model);
+        }
+
+        // Optional fields: incoming Some overwrites, None preserves existing
+        if other.context_tokens.is_some() {
+            self.context_tokens = other.context_tokens;
+        }
+        if other.context_max.is_some() {
+            self.context_max = other.context_max;
+        }
+        if other.context_window_pct.is_some() {
+            self.context_window_pct = other.context_window_pct;
+        }
+        if other.input_tps.is_some() {
+            self.input_tps = other.input_tps;
+        }
+        if other.output_tps.is_some() {
+            self.output_tps = other.output_tps;
+        }
+        if other.cost_reported.is_some() {
+            self.cost_reported = other.cost_reported;
+        }
+        if other.git_branch.is_some() {
+            self.git_branch.clone_from(&other.git_branch);
+        }
+        if other.work_dir.is_some() {
+            self.work_dir.clone_from(&other.work_dir);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionStatus {
     Active,

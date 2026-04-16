@@ -23,11 +23,20 @@ pub struct GeneralConfig {
 #[serde(default)]
 pub struct ProvidersConfig {
     pub claude_code: ClaudeCodeConfig,
+    pub code_buddy: CodeBuddyConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ClaudeCodeConfig {
+    pub enabled: bool,
+    pub socket_path: String,
+    pub log_dirs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct CodeBuddyConfig {
     pub enabled: bool,
     pub socket_path: String,
     pub log_dirs: Vec<String>,
@@ -88,6 +97,7 @@ impl Default for ProvidersConfig {
     fn default() -> Self {
         Self {
             claude_code: ClaudeCodeConfig::default(),
+            code_buddy: CodeBuddyConfig::default(),
         }
     }
 }
@@ -99,6 +109,17 @@ impl Default for ClaudeCodeConfig {
             enabled: true,
             socket_path: format!("{tmpdir}tokemon-claude.sock"),
             log_dirs: vec!["~/.claude/projects/".into()],
+        }
+    }
+}
+
+impl Default for CodeBuddyConfig {
+    fn default() -> Self {
+        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into());
+        Self {
+            enabled: true,
+            socket_path: format!("{tmpdir}tokemon-codebuddy.sock"),
+            log_dirs: vec!["~/.codebuddy/projects/".into()],
         }
     }
 }
