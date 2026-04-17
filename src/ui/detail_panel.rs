@@ -14,18 +14,36 @@ use crate::model::SessionSnapshot;
 use rust_i18n::t;
 
 pub fn render_session(frame: &mut Frame, app: &App, session_idx: usize, area: Rect) {
-    let block = Block::default()
-        .title(Line::styled(
+    let s_ref = app.sessions.get(session_idx);
+
+    // Title: provider + session id + status icon
+    let title = if let Some(s) = s_ref {
+        let id_short = &s.session_id[..s.session_id.len().min(6)];
+        let (icon, icon_color) = status_icon(s.status);
+        Line::from(vec![
+            Span::styled(format!(" {icon} "), Style::default().fg(icon_color)),
+            Span::styled(
+                format!("{} ", &s.provider),
+                Style::default().fg(LAVENDER).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!("#{id_short} "), Style::default().fg(TEXT)),
+        ])
+    } else {
+        Line::styled(
             format!(" {} ", t!("detail.title")),
             Style::default().fg(SUBTEXT0),
-        ))
+        )
+    };
+
+    let block = Block::default()
+        .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(SURFACE1))
         .padding(Padding::new(1, 1, 1, 0))
         .style(Style::default().bg(BASE));
 
-    let Some(s) = app.sessions.get(session_idx) else {
+    let Some(s) = s_ref else {
         let empty = Paragraph::new(format!("  {}", t!("overview.session_not_found")))
             .style(Style::default().fg(OVERLAY0))
             .block(block);
@@ -76,9 +94,16 @@ pub fn render_session(frame: &mut Frame, app: &App, session_idx: usize, area: Re
             Style::default().fg(PEACH).add_modifier(Modifier::BOLD),
         ),
     ];
-    if s.subagent_count > 0 {
+    if s.total_subagents > 0 {
         model_spans.push(Span::styled(
-            format!("  ⑂ {}", t!("detail.subagents", count = s.subagent_count)),
+            format!(
+                "  ⑂ {}",
+                t!(
+                    "detail.subagents",
+                    active = s.active_subagents,
+                    total = s.total_subagents
+                )
+            ),
             Style::default().fg(OVERLAY0),
         ));
     }
@@ -220,4 +245,14 @@ fn build_context_line(s: &SessionSnapshot, width: u16, lw: usize) -> Vec<Span<'s
     }
 
     spans
+}
+
+fn status_icon(status: crate::model::SessionStatus) -> (&'static str, Color) {
+    use crate::model::SessionStatus;
+    match status {
+        SessionStatus::Active => ("●", GREEN),
+        SessionStatus::Idle => ("◑", YELLOW),
+        SessionStatus::Done => ("✓", OVERLAY0),
+        SessionStatus::Disconnected => ("✗", RED),
+    }
 }

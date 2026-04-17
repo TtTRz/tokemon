@@ -110,6 +110,21 @@ impl App {
         sessions
     }
 
+    /// Get the currently focused session (selected in overview, or active session tab).
+    pub fn focused_session(&self) -> Option<&SessionSnapshot> {
+        match &self.active_tab {
+            ActiveTab::Overview => {
+                let live = self.live_sessions();
+                live.get(self.overview_selected).copied()
+            }
+            ActiveTab::History => {
+                let done = self.done_sessions();
+                done.get(self.history_selected).copied()
+            }
+            ActiveTab::Session(id) => self.sessions.iter().find(|s| &s.session_id == id),
+        }
+    }
+
     /// Ordered list of tab labels: Overview + History + live sessions.
     pub fn tab_labels(&self) -> Vec<String> {
         let mut labels = vec![
@@ -223,11 +238,11 @@ impl App {
 
                 let total_tokens = (snapshot.input_tokens + snapshot.output_tokens) as f64;
                 let tok_series = self.session_token_series.entry(sid.clone()).or_default();
-                // Seed origin point so chart doesn't draw from (0,0)
+                // Seed origin so chart starts at current value
                 if is_new_session && tok_series.is_empty() && session_elapsed > 0.0 {
                     tok_series.push((0.0, total_tokens));
                 }
-                // Monotonic clamp: ensure cumulative values never decrease
+                // Ensure cumulative values never decrease
                 let total_tokens = Self::monotonic_clamp(tok_series, total_tokens);
                 tok_series.push((session_elapsed, total_tokens));
                 Self::trim_series(tok_series, self.max_series_points);
@@ -513,7 +528,8 @@ impl App {
                 work_dir: Some("~/projects/myapp".into()),
                 status: SessionStatus::Active,
                 timestamp: Utc::now(),
-                subagent_count: 3,
+                active_subagents: 2,
+                total_subagents: 3,
             },
             SessionSnapshot {
                 session_id: "d4e5f6".into(),
@@ -533,7 +549,8 @@ impl App {
                 work_dir: Some("~/projects/api".into()),
                 status: SessionStatus::Idle,
                 timestamp: Utc::now(),
-                subagent_count: 0,
+                active_subagents: 0,
+                total_subagents: 0,
             },
             SessionSnapshot {
                 session_id: "g7h8i9".into(),
@@ -553,7 +570,8 @@ impl App {
                 work_dir: Some("~/projects/backend".into()),
                 status: SessionStatus::Active,
                 timestamp: Utc::now(),
-                subagent_count: 1,
+                active_subagents: 1,
+                total_subagents: 1,
             },
             SessionSnapshot {
                 session_id: "j0k1l2".into(),
@@ -573,7 +591,8 @@ impl App {
                 work_dir: Some("~/projects/frontend".into()),
                 status: SessionStatus::Done,
                 timestamp: Utc::now(),
-                subagent_count: 2,
+                active_subagents: 0,
+                total_subagents: 2,
             },
         ];
 

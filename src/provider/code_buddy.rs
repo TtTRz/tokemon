@@ -233,7 +233,8 @@ fn statusline_to_snapshot(data: &StatuslineData) -> Option<SessionSnapshot> {
         work_dir,
         status: SessionStatus::Active,
         timestamp: Utc::now(),
-        subagent_count: 0,
+        active_subagents: 0,
+        total_subagents: 0,
     })
 }
 
@@ -345,7 +346,8 @@ struct SessionAccumulator {
     total_cached: u64,
     cwd: Option<String>,
     last_timestamp: Option<DateTime<Utc>>,
-    subagent_count: usize,
+    active_subagents: usize,
+    total_subagents: usize,
 }
 
 impl SessionAccumulator {
@@ -358,7 +360,8 @@ impl SessionAccumulator {
             total_cached: 0,
             cwd: None,
             last_timestamp: None,
-            subagent_count: 0,
+            active_subagents: 0,
+            total_subagents: 0,
         }
     }
 
@@ -407,14 +410,15 @@ impl SessionAccumulator {
             context_tokens: None,
             context_max: None,
             context_window_pct: None,
-            input_tps: None,  // No duration data in CodeBuddy logs
-            output_tps: None, // No duration data in CodeBuddy logs
+            input_tps: None,
+            output_tps: None,
             cost_reported: None,
             git_branch: None,
             work_dir: self.cwd.clone(),
             status,
             timestamp: self.last_timestamp.unwrap_or(now),
-            subagent_count: self.subagent_count,
+            active_subagents: self.active_subagents,
+            total_subagents: self.total_subagents,
         }
     }
 }
@@ -471,10 +475,17 @@ fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
     };
 
     let mut count = 0usize;
+    let mut active_count = 0usize;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "jsonl") {
             count += 1;
+            if let Ok(meta) = path.metadata()
+                && let Ok(modified) = meta.modified()
+                && modified.elapsed().is_ok_and(|age| age.as_secs() < 300)
+            {
+                active_count += 1;
+            }
             let Ok(content) = std::fs::read_to_string(&path) else {
                 continue;
             };
@@ -509,7 +520,8 @@ fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
             }
         }
     }
-    acc.subagent_count = count;
+    acc.active_subagents = active_count;
+    acc.total_subagents = count;
 }
 
 fn scan_all_sessions(base_dir: &Path) -> anyhow::Result<Vec<SessionSnapshot>> {

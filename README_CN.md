@@ -67,6 +67,8 @@ tokemon
 - 内置 Claude、GPT、O3、GLM 定价
 - 缓存 token 定价（写入/读取）
 - 所有定价在配置文件中 — 无隐藏硬编码
+- 模糊模型名匹配（兼容不同命名格式）
+- 未匹配模型在状态栏高亮提示
 
 </td>
 </tr>
@@ -247,5 +249,5 @@ graph TD
 ---
 
 <div align="center">
-<sub>基于 🦀 Rust + ratatui 构建 · Catppuccin Mocha 主题 · 为 AI 辅助开发者打造</sub>
+<sub>基于 Rust + ratatui 构建 · Catppuccin Mocha 主题</sub>
 </div>

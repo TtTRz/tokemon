@@ -227,9 +227,10 @@ fn statusline_to_snapshot(data: &StatuslineData) -> Option<SessionSnapshot> {
         cost_reported,
         git_branch: None, // statusline doesn't include git branch
         work_dir,
-        status: SessionStatus::Active, // If statusline is sending data, it's active
+        status: SessionStatus::Active,
         timestamp: Utc::now(),
-        subagent_count: 0,
+        active_subagents: 0,
+        total_subagents: 0,
     })
 }
 
@@ -335,8 +336,9 @@ struct SessionAccumulator {
     last_timestamp: Option<DateTime<Utc>>,
     turn_count: u64,
     total_duration_ms: u64,
-    subagent_count: usize,
-    /// Per-turn estimated cost accumulator (more accurate than post-hoc calculation)
+    active_subagents: usize,
+    total_subagents: usize,
+    /// Per-turn estimated cost accumulator
     per_turn_cost: f64,
     /// Track the last model seen, for per-turn cost calculation
     last_model: String,
@@ -356,7 +358,8 @@ impl SessionAccumulator {
             last_timestamp: None,
             turn_count: 0,
             total_duration_ms: 0,
-            subagent_count: 0,
+            active_subagents: 0,
+            total_subagents: 0,
             per_turn_cost: 0.0,
             last_model: String::new(),
         }
@@ -442,7 +445,7 @@ impl SessionAccumulator {
             context_window_pct: None,
             input_tps,
             output_tps,
-            // Use per-turn accumulated cost (more accurate than post-hoc estimate)
+            // Per-turn accumulated cost
             cost_reported: if self.per_turn_cost > 0.0 {
                 Some(self.per_turn_cost)
             } else {
@@ -452,7 +455,8 @@ impl SessionAccumulator {
             work_dir: self.cwd.clone(),
             status,
             timestamp: self.last_timestamp.unwrap_or(now),
-            subagent_count: self.subagent_count,
+            active_subagents: self.active_subagents,
+            total_subagents: self.total_subagents,
         }
     }
 }
@@ -504,10 +508,18 @@ fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
     };
 
     let mut count = 0usize;
+    let mut active_count = 0usize;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "jsonl") {
             count += 1;
+            // Check if subagent is recently active (mtime within 5 minutes)
+            if let Ok(meta) = path.metadata()
+                && let Ok(modified) = meta.modified()
+                && modified.elapsed().is_ok_and(|age| age.as_secs() < 300)
+            {
+                active_count += 1;
+            }
             let Ok(content) = std::fs::read_to_string(&path) else {
                 continue;
             };
@@ -551,7 +563,8 @@ fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
             }
         }
     }
-    acc.subagent_count = count;
+    acc.active_subagents = active_count;
+    acc.total_subagents = count;
 }
 
 fn scan_all_sessions(base_dir: &Path) -> anyhow::Result<Vec<SessionSnapshot>> {
@@ -663,8 +676,7 @@ fn resolve_to_parent_session(path: &Path) -> PathBuf {
 /// Claude Code creates `/tmp/claude-{uid}/{project}/{session_id}/` while running.
 /// The directory is cleaned up when the session exits.
 fn is_claude_session_alive(session_id: &str) -> bool {
-    // SAFETY: getuid() is a POSIX syscall that always succeeds, has no side effects,
-    // and requires no preconditions. The unsafe block is only needed for FFI boundary.
+    // SAFETY: getuid() is a POSIX syscall with no preconditions.
     let uid = unsafe { libc::getuid() };
     let tmp = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp/".into());
     let claude_tmp = PathBuf::from(tmp).join(format!("claude-{uid}"));

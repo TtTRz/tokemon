@@ -69,10 +69,11 @@ history.col_time: "时间"
 detail.title: "详情"
 detail.chart_tokens: "Token"
 detail.chart_cost: "费用"
-detail.subagents: "%{count} 个子代理"
+detail.subagents: "%{active} 活跃 / %{total} 总计"
 
 # Alert bar
 alert.keys: "1-9 标签 · j/k 导航 · Enter 打开 · Esc 返回 · ? 帮助 · q 退出"
+alert.no_pricing: "未配置该模型的定价"
 alert.context_high: "%{provider}#%{session_id} 上下文 %{pct}%%"
 alert.cost_threshold: "#%{session_id} 费用 $%{cost} 超过 $%{threshold}"
 alert.provider_disconnected: "%{provider} 已断开: %{error}"

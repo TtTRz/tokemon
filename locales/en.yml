@@ -69,10 +69,11 @@ history.col_time: "Time"
 detail.title: "Detail"
 detail.chart_tokens: "Tokens"
 detail.chart_cost: "Cost"
-detail.subagents: "%{count} subagents"
+detail.subagents: "%{active} active / %{total} total"
 
 # Alert bar
 alert.keys: "1-9 tabs · j/k nav · Enter open · Esc back · ? help · q quit"
+alert.no_pricing: "No pricing configured for this model"
 alert.context_high: "%{provider}#%{session_id} context %{pct}%%"
 alert.cost_threshold: "#%{session_id} cost $%{cost} exceeds $%{threshold}"
 alert.provider_disconnected: "%{provider} disconnected: %{error}"

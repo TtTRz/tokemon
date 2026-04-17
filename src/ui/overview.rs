@@ -317,7 +317,7 @@ fn render_card(frame: &mut Frame, app: &App, idx: usize, selected: bool, area: R
 }
 
 fn render_info_rows(frame: &mut Frame, app: &App, s: &SessionSnapshot, rows: &[Rect]) {
-    // Layout indices: 0=model, 1=ctx, 2=tokens, 3=speed, 4=cost, 5=dir
+    // Layout: 0=model, 1=ctx, 2=tokens, 3=speed, 4=cost, 5=dir
     let lbl = Style::default().fg(OVERLAY0);
     let sep = Span::styled(" · ", Style::default().fg(SURFACE1));
 
@@ -342,9 +342,16 @@ fn render_info_rows(frame: &mut Frame, app: &App, s: &SessionSnapshot, rows: &[R
             Style::default().fg(PEACH).add_modifier(Modifier::BOLD),
         ),
     ];
-    if s.subagent_count > 0 {
+    if s.total_subagents > 0 {
         model_spans.push(Span::styled(
-            format!("  ⑂ {}", t!("detail.subagents", count = s.subagent_count)),
+            format!(
+                "  ⑂ {}",
+                t!(
+                    "detail.subagents",
+                    active = s.active_subagents,
+                    total = s.total_subagents
+                )
+            ),
             Style::default().fg(OVERLAY0),
         ));
     }

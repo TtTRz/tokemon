@@ -24,8 +24,10 @@ pub struct SessionSnapshot {
     pub work_dir: Option<String>,
     pub status: SessionStatus,
     pub timestamp: DateTime<Utc>,
-    /// Number of subagent JSONL files in this session
-    pub subagent_count: usize,
+    /// Number of currently active subagents (mtime < 5min)
+    pub active_subagents: usize,
+    /// Total number of subagent JSONL files in this session
+    pub total_subagents: usize,
 }
 
 impl SessionSnapshot {
@@ -77,8 +79,8 @@ impl SessionSnapshot {
         if other.work_dir.is_some() {
             self.work_dir.clone_from(&other.work_dir);
         }
-        // Subagent count: always take the latest value
-        self.subagent_count = self.subagent_count.max(other.subagent_count);
+        self.active_subagents = other.active_subagents;
+        self.total_subagents = self.total_subagents.max(other.total_subagents);
     }
 }
 

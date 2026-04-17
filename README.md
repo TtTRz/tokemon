@@ -67,6 +67,8 @@ tokemon
 - Built-in pricing for Claude, GPT, O3, GLM
 - Cache token pricing (write / read)
 - All pricing in config file — no hidden hardcoding
+- Fuzzy model name matching (handles naming variants)
+- Unmatched models highlighted in status bar
 
 </td>
 </tr>
@@ -247,5 +249,5 @@ graph TD
 ---
 
 <div align="center">
-<sub>Built with 🦀 Rust + ratatui · Catppuccin Mocha theme · Made for AI-assisted developers</sub>
+<sub>Built with Rust + ratatui · Catppuccin Mocha theme</sub>
 </div>

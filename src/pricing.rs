@@ -16,9 +16,6 @@ pub struct ModelPricing {
 pub struct PricingEngine {
     /// Model pricing from config (includes defaults + user overrides)
     models: HashMap<String, ModelPricing>,
-    /// Fallback for unknown models
-    default_input: f64,
-    default_output: f64,
 }
 
 impl PricingEngine {
@@ -36,43 +33,43 @@ impl PricingEngine {
             );
         }
 
-        Self {
-            models,
-            default_input: config.default_input,
-            default_output: config.default_output,
-        }
+        Self { models }
     }
 
-    /// Resolve pricing: exact match > prefix match > fallback.
-    pub fn get_price(&self, model: &str) -> ModelPricing {
-        if let Some(p) = self.models.get(model) {
-            return p.clone();
+    /// Resolve pricing. Returns `None` if no matching model found.
+    pub fn get_price(&self, model: &str) -> Option<ModelPricing> {
+        let bare = model.split('[').next().unwrap_or(model);
+
+        // Exact match
+        if let Some(p) = self.models.get(bare) {
+            return Some(p.clone());
         }
-        // Try prefix match (e.g. "claude-sonnet-4" matches "claude-sonnet-4-20250514")
+
+        // Fuzzy token match
+        let input_tokens = model_tokens(bare);
+        let mut best: Option<(&ModelPricing, usize)> = None;
+
         for (key, p) in &self.models {
-            if model.starts_with(key) || key.starts_with(model) {
-                return p.clone();
+            let key_tokens = model_tokens(key);
+            let overlap = input_tokens
+                .iter()
+                .filter(|t| key_tokens.contains(t))
+                .count();
+            if overlap >= 2 && best.is_none_or(|(_, prev_score)| overlap > prev_score) {
+                best = Some((p, overlap));
             }
         }
-        ModelPricing {
-            input_per_mtok: self.default_input,
-            output_per_mtok: self.default_output,
-            cache_write_per_mtok: None,
-            cache_read_per_mtok: None,
-        }
+
+        best.map(|(p, _)| p.clone())
     }
 
-    /// Estimate cost for a session snapshot (called at render time).
-    ///
-    /// `input_tokens` is the total input count (including cached portions).
-    /// We subtract cache tokens to avoid double-counting, then price each
-    /// bucket at its own rate. If no cache-specific pricing is configured,
-    /// cached tokens fall back to the regular input rate.
+    /// Estimate cost for a session snapshot. Returns 0.0 if model not found.
     pub fn estimate_cost(&self, snapshot: &SessionSnapshot) -> f64 {
-        let pricing = self.get_price(&snapshot.model);
+        let Some(pricing) = self.get_price(&snapshot.model) else {
+            return 0.0;
+        };
 
-        // Clamp total cached to input_tokens to avoid negative non_cached_input
-        // (can happen when merge() updates fields independently from different sources)
+        // Clamp cached to input_tokens to handle cross-source merge inconsistency
         let total_cached = (snapshot.cache_creation_tokens + snapshot.cache_read_tokens)
             .min(snapshot.input_tokens);
         let non_cached_input = snapshot.input_tokens - total_cached;
@@ -101,9 +98,10 @@ pub fn estimate_turn_cost_builtin(
     cache_creation: u64,
     cache_read: u64,
 ) -> f64 {
-    // Resolve pricing from builtins (same data as PricingEngine::builtin_prices)
     let engine = PricingEngine::new(&crate::config::PricingConfig::default());
-    let pricing = engine.get_price(model);
+    let Some(pricing) = engine.get_price(model) else {
+        return 0.0;
+    };
 
     let total_cached = (cache_creation + cache_read).min(input_tokens);
     let non_cached = input_tokens - total_cached;
@@ -118,4 +116,17 @@ pub fn estimate_turn_cost_builtin(
     let read_cost = cache_read as f64 * pricing.cache_read_per_mtok.unwrap_or(0.0) / 1_000_000.0;
 
     input_cost + output_cost + write_cost + read_cost
+}
+
+/// Split a model name into lowercase tokens for fuzzy matching.
+/// e.g. "claude-4.6-opus" → {"claude", "4", "6", "opus"}
+/// e.g. "claude-opus-4-6[1m]" → {"claude", "opus", "4", "6"}
+fn model_tokens(name: &str) -> Vec<String> {
+    // Strip [...] suffix first
+    let bare = name.split('[').next().unwrap_or(name);
+    bare.to_lowercase()
+        .split(['-', '_', '.'])
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
 }
