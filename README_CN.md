@@ -30,9 +30,16 @@
 ## 🚀 快速开始
 
 ```bash
-# 安装
-cargo install --path .
+# 从 crates.io 安装
+cargo install tokemon-cli
 
+# 或从源码构建
+git clone https://github.com/TtTRz/tokemon.git
+cd tokemon
+cargo install --path .
+```
+
+```bash
 # 设置 Claude Code 集成（一次性）
 tokemon setup claude-code
 

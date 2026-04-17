@@ -30,9 +30,16 @@
 ## 🚀 Quick Start
 
 ```bash
-# Install
-cargo install --path .
+# Install from crates.io
+cargo install tokemon-cli
 
+# Or build from source
+git clone https://github.com/TtTRz/tokemon.git
+cd tokemon
+cargo install --path .
+```
+
+```bash
 # Set up Claude Code integration (one-time)
 tokemon setup claude-code
 
