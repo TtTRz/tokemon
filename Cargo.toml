@@ -1,5 +1,5 @@
 [package]
-name = "tokemon"
+name = "tokemon-cli"
 version = "0.2.2"
 edition = "2024"
 description = "Token Monitor — Terminal dashboard for monitoring AI coding tools (Claude Code, Codex, CodeBuddy)"
@@ -9,6 +9,10 @@ authors = ["TtTRz <romc1224@gmail.com>"]
 keywords = ["tui", "monitor", "ai", "token", "dashboard"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
+
+[[bin]]
+name = "tokemon"
+path = "src/main.rs"
 
 [dependencies]
 ratatui = "0.29"
