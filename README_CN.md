@@ -2,16 +2,16 @@
 
 <br>
 
-```
+<pre>
 ████████╗ ██████╗ ██╗  ██╗███████╗███╗   ███╗ ██████╗ ███╗   ██╗
 ╚══██╔══╝██╔═══██╗██║ ██╔╝██╔════╝████╗ ████║██╔═══██╗████╗  ██║
    ██║   ██║   ██║█████╔╝ █████╗  ██╔████╔██║██║   ██║██╔██╗ ██║
    ██║   ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║
    ██║   ╚██████╔╝██║  ██╗███████╗██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
-```
+</pre>
 
-### 🖥️ Token Monitor — AI 编码工具终端监控面板
+**Token Monitor — AI 编码工具终端监控面板**
 
 <br>
 
@@ -56,15 +56,17 @@ tokemon
 - 上下文窗口 % 带色彩进度条
 - 输入/输出吞吐速率 (tokens/sec)
 - Pill 风格状态徽章
+- 每个会话显示子代理数量
 
 </td>
 <td width="50%">
 
-### 💰 费用估算
-- 内置 Claude、GPT、O3 定价
+### 💰 费用追踪
+- 逐 turn 精确成本累计（精确到每次 API 调用）
+- 优先使用 Provider 报告的真实费用
+- 内置 Claude、GPT、O3、GLM 定价
 - 缓存 token 定价（写入/读取）
-- 用户自定义模型价格覆盖
-- 渲染时估算 — 改价即刻生效
+- 所有定价在配置文件中 — 无隐藏硬编码
 
 </td>
 </tr>
@@ -74,6 +76,7 @@ tokemon
 ### 🗂️ Overview 仪表盘
 - 卡片网格布局（自动 1/2 列）
 - 每个 session 带迷你趋势图
+- 子代理 token 合并至父会话
 - Vim 风格导航（`h/j/k/l`）
 - 滚动提示 + 页码指示
 
@@ -82,9 +85,29 @@ tokemon
 
 ### 🔍 Session 详情页
 - 完整详情面板，表格对齐
-- Token 速率 + 费用趋势图
+- Token + 费用趋势图（共享渲染器）
 - Git 分支 + 工作目录
 - ANSI Shadow ASCII 艺术字头部
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 🌐 国际化
+- 内置英文 + 简体中文
+- 自动检测系统语言
+- `--lang` 命令行参数或配置覆盖
+- CJK 字符宽度自适应渲染
+
+</td>
+<td>
+
+### 🔔 智能告警
+- 上下文窗口 80% / 95% 阈值告警
+- 费用阈值告警
+- Provider 断连检测
+- 进程存活检测（Claude Code）
 
 </td>
 </tr>
@@ -99,7 +122,7 @@ tokemon
 | | 没有 tokemon | 有 tokemon |
 |:--|:--|:--|
 | 👀 **可见性** | 每个工具各自日志，分散各处 | 统一面板，所有 session 一目了然 |
-| 💵 **费用** | 事后去账单页面查 | 实时估算，逐模型定价 |
+| 💵 **费用** | 事后去账单页面查 | 逐 turn 成本追踪，cache 感知定价 |
 | 📐 **上下文** | 不知道窗口还剩多少 | 实时进度条 + 80% / 95% 告警 |
 | 🪟 **多会话** | 在终端之间 Alt-tab | 卡片网格 + 独立 tab |
 | ⚡ **吞吐量** | 无法度量 | 输入/输出 tokens/秒 |
@@ -108,16 +131,16 @@ tokemon
 
 ## ⌨️ 快捷键
 
-```
-  1-9 .............. 跳转 tab（1=Overview，2+=各 session）
-  Tab / S-Tab ...... 下一个 / 上一个 tab
-  j/k ↑/↓ ......... 上下导航卡片
-  h/l ←/→ ......... 左右导航卡片
-  Enter ............ 打开 session 详情 tab
-  Esc .............. 返回 Overview / 退出
-  ? ................ 帮助弹窗
-  q / Ctrl+C ....... 退出
-```
+| 按键 | 操作 |
+|:--|:--|
+| `1-9` | 跳转 tab（1=Overview，2+=各 session） |
+| `Tab` / `S-Tab` | 下一个 / 上一个 tab |
+| `j/k` `↑/↓` | 上下导航卡片 |
+| `h/l` `←/→` | 左右导航卡片 |
+| `Enter` | 打开 session 详情 tab |
+| `Esc` | 返回 Overview / 退出 |
+| `?` | 帮助弹窗 |
+| `q` / `Ctrl+C` | 退出 |
 
 <br>
 
@@ -126,8 +149,8 @@ tokemon
 | Provider | 数据来源 | 安装 | 状态 |
 |:--|:--|:--|:--|
 | **Claude Code** | Statusline socket + JSONL 日志 | `tokemon setup claude-code` | ✅ 就绪 |
-| **Codex** (OpenAI) | 日志文件监听 | — | 🔜 Phase 2 |
-| **CodeBuddy** | 日志文件监听 | — | 🔜 Phase 2 |
+| **CodeBuddy** | Statusline socket + JSONL 日志 | `tokemon setup code-buddy` | ✅ 就绪 |
+| **Codex** (OpenAI) | 日志文件监听 | — | 🔜 计划中 |
 | **Custom** | 用户自定义 socket / 文件 | — | 🧩 可扩展 |
 
 > [!NOTE]
@@ -139,7 +162,7 @@ tokemon
 
 ## ⚙️ 配置
 
-默认路径：`~/.config/tokemon/config.toml`
+默认路径：`~/.config/tokemon/config.toml`（首次运行自动生成）
 
 <details>
 <summary><b>📄 完整配置示例</b></summary>
@@ -150,15 +173,17 @@ tokemon
 [general]
 tick_rate_ms = 250
 theme = "dark"
+# locale = "zh-CN"  # 显示语言（不设则自动检测）
 
 [providers.claude_code]
 enabled = true
 socket_path = "$TMPDIR/tokemon-claude.sock"
 log_dirs = ["~/.claude/projects/"]
 
-[providers.codex]
-enabled = false
-log_dirs = ["~/.codex/"]
+[providers.code_buddy]
+enabled = true
+socket_path = "$TMPDIR/tokemon-codebuddy.sock"
+log_dirs = ["~/.codebuddy/projects/"]
 
 [pricing]
 default_input = 3.0    # 未知模型兜底价 ($/1M tokens)
@@ -186,17 +211,17 @@ cost_threshold_usd = 5.0     # 费用告警阈值
 graph TD
     A[App - ratatui TUI] --> B[Collector]
     B --> C[Claude Code Provider]
-    B --> D[Codex Provider]
-    B --> E[CodeBuddy Provider]
+    B --> D[CodeBuddy Provider]
     A --> F[Pricing Engine]
     A --> G[Alert Engine]
+    A --> H[i18n - rust-i18n]
     C -->|ProviderEvent| B
     D -->|ProviderEvent| B
-    E -->|ProviderEvent| B
     style A fill:#89b4fa,color:#1e1e2e
     style B fill:#a6e3a1,color:#1e1e2e
     style F fill:#fab387,color:#1e1e2e
     style G fill:#f38ba8,color:#1e1e2e
+    style H fill:#cba6f7,color:#1e1e2e
 ```
 
 <br>
@@ -208,7 +233,8 @@ graph TD
 | 🖼️ | [ratatui](https://github.com/ratatui/ratatui) 0.29 | TUI 框架，内置 Chart/Gauge 等组件 |
 | 💻 | [crossterm](https://github.com/crossterm-rs/crossterm) 0.28 | 跨平台终端后端 |
 | ⚡ | [tokio](https://tokio.rs/) | 异步运行时，并发采集 Provider 数据 |
-| 👁️ | [notify](https://github.com/notify-rs/notify) 7 | 文件系统监听，日志尾随 + 配置热重载 |
+| 👁️ | [notify](https://github.com/notify-rs/notify) 7 | 文件系统监听，日志尾随 |
+| 🌐 | [rust-i18n](https://github.com/longbridgeapp/rust-i18n) 3 | 编译期 i18n，YAML 翻译文件 |
 | 📋 | [clap](https://github.com/clap-rs/clap) 4 | CLI 参数解析 |
 | 📐 | [toml](https://github.com/toml-rs/toml) | 配置文件解析 |
 

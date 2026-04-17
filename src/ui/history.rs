@@ -2,24 +2,15 @@ use chrono::Local;
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Padding, Row, Table, TableState},
 };
+use rust_i18n::t;
 
+use super::shared::fmt_tok;
+use super::theme::*;
 use crate::app::App;
-
-// Catppuccin Mocha
-const BASE: Color = Color::Rgb(30, 30, 46);
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
-const OVERLAY0: Color = Color::Rgb(108, 112, 134);
-const SUBTEXT0: Color = Color::Rgb(166, 173, 200);
-const TEXT: Color = Color::Rgb(205, 214, 244);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const PEACH: Color = Color::Rgb(250, 179, 135);
-const SKY: Color = Color::Rgb(137, 220, 235);
-const MAUVE: Color = Color::Rgb(203, 166, 247);
 
 pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     let done_count = app.done_sessions().len();
@@ -27,11 +18,11 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .title(Line::from(vec![
             Span::styled(
-                " History ",
+                format!(" {} ", t!("history.title")),
                 Style::default().fg(SUBTEXT0).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!(" {} sessions ", done_count),
+                format!(" {} ", t!("history.sessions_count", count = done_count)),
                 Style::default().fg(OVERLAY0),
             ),
         ]))
@@ -42,7 +33,7 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         .style(Style::default().bg(BASE));
 
     if done_count == 0 {
-        let empty = ratatui::widgets::Paragraph::new("  No completed sessions yet.")
+        let empty = ratatui::widgets::Paragraph::new(format!("  {}", t!("history.empty")))
             .style(Style::default().fg(OVERLAY0))
             .block(block);
         frame.render_widget(empty, area);
@@ -69,14 +60,14 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
 
     // Header
     let header = Row::new(vec![
-        "  Provider",
-        "Session",
-        "Model",
-        "In",
-        "Out",
-        "Cost",
-        "Dir",
-        "Time",
+        format!("  {}", t!("history.col_provider")),
+        t!("history.col_session").to_string(),
+        t!("history.col_model").to_string(),
+        t!("history.col_in").to_string(),
+        t!("history.col_out").to_string(),
+        t!("history.col_cost").to_string(),
+        t!("history.col_dir").to_string(),
+        t!("history.col_time").to_string(),
     ])
     .style(Style::default().fg(OVERLAY0).add_modifier(Modifier::BOLD));
 
@@ -143,14 +134,4 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     state.select(Some(app.history_selected));
     state.offset_mut().clone_from(&app.history_scroll);
     frame.render_stateful_widget(table, inner, &mut state);
-}
-
-fn fmt_tok(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        format!("{n}")
-    }
 }

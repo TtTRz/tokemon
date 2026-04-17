@@ -17,6 +17,8 @@ pub struct Config {
 pub struct GeneralConfig {
     pub tick_rate_ms: u64,
     pub theme: String,
+    #[serde(default)]
+    pub locale: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -87,6 +89,7 @@ impl Default for GeneralConfig {
         Self {
             tick_rate_ms: 250,
             theme: "dark".into(),
+            locale: None,
         }
     }
 }
@@ -126,10 +129,74 @@ impl Default for CodeBuddyConfig {
 
 impl Default for PricingConfig {
     fn default() -> Self {
+        let mut models = HashMap::new();
+        models.insert(
+            "claude-sonnet-4".into(),
+            ModelPricingConfig {
+                input: 3.0,
+                output: 15.0,
+                cache_write: Some(3.75),
+                cache_read: Some(0.30),
+            },
+        );
+        models.insert(
+            "claude-4.6-opus".into(),
+            ModelPricingConfig {
+                input: 5.0,
+                output: 25.0,
+                cache_write: Some(6.25),
+                cache_read: Some(0.50),
+            },
+        );
+        models.insert(
+            "claude-haiku-3.5".into(),
+            ModelPricingConfig {
+                input: 0.80,
+                output: 4.0,
+                cache_write: Some(1.0),
+                cache_read: Some(0.08),
+            },
+        );
+        models.insert(
+            "o3".into(),
+            ModelPricingConfig {
+                input: 10.0,
+                output: 40.0,
+                cache_write: None,
+                cache_read: None,
+            },
+        );
+        models.insert(
+            "gpt-4.1".into(),
+            ModelPricingConfig {
+                input: 2.0,
+                output: 8.0,
+                cache_write: None,
+                cache_read: None,
+            },
+        );
+        models.insert(
+            "glm-5".into(),
+            ModelPricingConfig {
+                input: 1.4,
+                output: 4.4,
+                cache_write: None,
+                cache_read: Some(0.475),
+            },
+        );
+        models.insert(
+            "glm-5.1".into(),
+            ModelPricingConfig {
+                input: 1.4,
+                output: 4.4,
+                cache_write: None,
+                cache_read: Some(0.475),
+            },
+        );
         Self {
             default_input: 3.0,
             default_output: 15.0,
-            models: HashMap::new(),
+            models,
         }
     }
 }
@@ -145,7 +212,8 @@ impl Default for AlertsConfig {
 }
 
 impl Config {
-    /// Load from `~/.config/tokemon/config.toml`, falling back to defaults.
+    /// Load from `~/.config/tokemon/config.toml`.
+    /// If the file doesn't exist, generate a default config and write it to disk.
     pub fn load() -> Self {
         let path = dirs::config_dir()
             .map(|d| d.join("tokemon").join("config.toml"))
@@ -167,9 +235,88 @@ impl Config {
                 }
             }
         } else {
-            tracing::info!("No config file found at {}, using defaults", path.display());
+            // Generate default config file
+            let config = Self::default();
+            config.write_default(&path);
         }
 
         Self::default()
+    }
+
+    /// Write a commented default config to disk.
+    fn write_default(&self, path: &std::path::Path) {
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            tracing::warn!("Failed to create config dir: {e}");
+            return;
+        }
+
+        let content = Self::default_config_toml();
+        match std::fs::write(path, content) {
+            Ok(()) => tracing::info!("Generated default config at {}", path.display()),
+            Err(e) => tracing::warn!("Failed to write default config: {e}"),
+        }
+    }
+
+    /// Generate a human-readable default config with comments.
+    fn default_config_toml() -> String {
+        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp/".into());
+        let mut s = String::new();
+
+        s.push_str("# tokemon — Token Monitor configuration\n");
+        s.push_str("# https://github.com/TtTRz/tokemon\n\n");
+
+        s.push_str("[general]\n");
+        s.push_str("tick_rate_ms = 250\n");
+        s.push_str("theme = \"dark\"\n");
+        s.push_str("# locale = \"zh-CN\"  # Display language (auto-detected if omitted)\n\n");
+
+        s.push_str("[providers.claude_code]\n");
+        s.push_str("enabled = true\n");
+        s.push_str(&format!(
+            "socket_path = \"{}tokemon-claude.sock\"\n",
+            tmpdir
+        ));
+        s.push_str("log_dirs = [\"~/.claude/projects/\"]\n\n");
+
+        s.push_str("[providers.code_buddy]\n");
+        s.push_str("enabled = true\n");
+        s.push_str(&format!(
+            "socket_path = \"{}tokemon-codebuddy.sock\"\n",
+            tmpdir
+        ));
+        s.push_str("log_dirs = [\"~/.codebuddy/projects/\"]\n\n");
+
+        s.push_str("# Pricing: $/1M tokens. Used for cost estimation when provider\n");
+        s.push_str("# doesn't report actual cost. Prefix-matched against model names.\n");
+        s.push_str("[pricing]\n");
+        s.push_str("default_input = 3.0\n");
+        s.push_str("default_output = 15.0\n\n");
+
+        // Sort model names for stable output
+        let defaults = PricingConfig::default();
+        let mut models: Vec<_> = defaults.models.iter().collect();
+        models.sort_by_key(|(k, _)| (*k).clone());
+
+        for (name, p) in &models {
+            s.push_str(&format!("[pricing.models.\"{}\"]\n", name));
+            s.push_str(&format!("input = {}\n", p.input));
+            s.push_str(&format!("output = {}\n", p.output));
+            if let Some(cw) = p.cache_write {
+                s.push_str(&format!("cache_write = {}\n", cw));
+            }
+            if let Some(cr) = p.cache_read {
+                s.push_str(&format!("cache_read = {}\n", cr));
+            }
+            s.push('\n');
+        }
+
+        s.push_str("[alerts]\n");
+        s.push_str("context_warn_pct = 80.0\n");
+        s.push_str("context_crit_pct = 95.0\n");
+        s.push_str("cost_threshold_usd = 5.0\n");
+
+        s
     }
 }

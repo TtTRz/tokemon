@@ -2,16 +2,16 @@
 
 <br>
 
-```
+<pre>
 ████████╗ ██████╗ ██╗  ██╗███████╗███╗   ███╗ ██████╗ ███╗   ██╗
 ╚══██╔══╝██╔═══██╗██║ ██╔╝██╔════╝████╗ ████║██╔═══██╗████╗  ██║
    ██║   ██║   ██║█████╔╝ █████╗  ██╔████╔██║██║   ██║██╔██╗ ██║
    ██║   ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║
    ██║   ╚██████╔╝██║  ██╗███████╗██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
-```
+</pre>
 
-### 🖥️ Token Monitor — Terminal dashboard for AI coding tools
+**Token Monitor — Terminal dashboard for AI coding tools**
 
 <br>
 
@@ -56,15 +56,17 @@ tokemon
 - Context window % with color-coded gauge
 - Input/output throughput (tokens/sec)
 - Session status with pill badge
+- Subagent count per session
 
 </td>
 <td width="50%">
 
-### 💰 Cost Estimation
-- Built-in pricing for Claude, GPT, O3
+### 💰 Cost Tracking
+- Per-turn cost accumulation (accurate to API call level)
+- Reported cost from provider when available
+- Built-in pricing for Claude, GPT, O3, GLM
 - Cache token pricing (write / read)
-- User-configurable model overrides
-- Render-time estimation — change price, instant update
+- All pricing in config file — no hidden hardcoding
 
 </td>
 </tr>
@@ -74,6 +76,7 @@ tokemon
 ### 🗂️ Overview Dashboard
 - Card grid layout (auto 1/2 columns)
 - Per-session mini trend charts
+- Subagent tokens merged into parent session
 - Vim-style navigation (`h/j/k/l`)
 - Scroll hints with page indicator
 
@@ -82,9 +85,29 @@ tokemon
 
 ### 🔍 Session Detail Tabs
 - Full detail panel, table-aligned fields
-- Token rate + cost trend charts
+- Token + cost trend charts (shared renderer)
 - Git branch + working directory
 - ANSI Shadow ASCII art header
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 🌐 Internationalization
+- English + 简体中文 built-in
+- Auto-detect system locale
+- `--lang` CLI flag or config override
+- CJK-aware column width rendering
+
+</td>
+<td>
+
+### 🔔 Smart Alerts
+- Context window 80% / 95% thresholds
+- Cost threshold alerts
+- Provider disconnect detection
+- Process-alive session status (Claude Code)
 
 </td>
 </tr>
@@ -99,7 +122,7 @@ tokemon
 | | Without tokemon | With tokemon |
 |:--|:--|:--|
 | 👀 **Visibility** | Scattered logs per tool | Unified dashboard, all sessions at a glance |
-| 💵 **Cost** | Check billing portal later | Real-time estimation with per-model pricing |
+| 💵 **Cost** | Check billing portal later | Per-turn cost tracking with cache-aware pricing |
 | 📐 **Context** | No idea how full the window is | Live gauge with 80% / 95% alerts |
 | 🪟 **Multi-session** | Alt-tab between terminals | Card grid + per-session tabs |
 | ⚡ **Speed** | No way to measure throughput | Input/output tokens per second |
@@ -108,16 +131,16 @@ tokemon
 
 ## ⌨️ Keybindings
 
-```
-  1-9 .............. Jump to tab (1=Overview, 2+=sessions)
-  Tab / S-Tab ...... Next / previous tab
-  j/k ↑/↓ ......... Navigate cards up/down
-  h/l ←/→ ......... Navigate cards left/right
-  Enter ............ Open session detail tab
-  Esc .............. Back to Overview / Quit
-  ? ................ Help overlay
-  q / Ctrl+C ....... Quit
-```
+| Key | Action |
+|:--|:--|
+| `1-9` | Jump to tab (1=Overview, 2+=sessions) |
+| `Tab` / `S-Tab` | Next / previous tab |
+| `j/k` `↑/↓` | Navigate cards up/down |
+| `h/l` `←/→` | Navigate cards left/right |
+| `Enter` | Open session detail tab |
+| `Esc` | Back to Overview / Quit |
+| `?` | Help overlay |
+| `q` / `Ctrl+C` | Quit |
 
 <br>
 
@@ -126,8 +149,8 @@ tokemon
 | Provider | Data Source | Setup | Status |
 |:--|:--|:--|:--|
 | **Claude Code** | Statusline socket + JSONL logs | `tokemon setup claude-code` | ✅ Ready |
-| **Codex** (OpenAI) | Log file watching | — | 🔜 Phase 2 |
-| **CodeBuddy** | Log file watching | — | 🔜 Phase 2 |
+| **CodeBuddy** | Statusline socket + JSONL logs | `tokemon setup code-buddy` | ✅ Ready |
+| **Codex** (OpenAI) | Log file watching | — | 🔜 Planned |
 | **Custom** | User-defined socket / file | — | 🧩 Extensible |
 
 > [!NOTE]
@@ -139,7 +162,7 @@ tokemon
 
 ## ⚙️ Configuration
 
-Default path: `~/.config/tokemon/config.toml`
+Default path: `~/.config/tokemon/config.toml` (auto-generated on first run)
 
 <details>
 <summary><b>📄 Full config example</b></summary>
@@ -150,15 +173,17 @@ Default path: `~/.config/tokemon/config.toml`
 [general]
 tick_rate_ms = 250
 theme = "dark"
+# locale = "zh-CN"  # Display language (auto-detected if omitted)
 
 [providers.claude_code]
 enabled = true
 socket_path = "$TMPDIR/tokemon-claude.sock"
 log_dirs = ["~/.claude/projects/"]
 
-[providers.codex]
-enabled = false
-log_dirs = ["~/.codex/"]
+[providers.code_buddy]
+enabled = true
+socket_path = "$TMPDIR/tokemon-codebuddy.sock"
+log_dirs = ["~/.codebuddy/projects/"]
 
 [pricing]
 default_input = 3.0    # $/1M tokens fallback
@@ -186,17 +211,17 @@ cost_threshold_usd = 5.0
 graph TD
     A[App - ratatui TUI] --> B[Collector]
     B --> C[Claude Code Provider]
-    B --> D[Codex Provider]
-    B --> E[CodeBuddy Provider]
+    B --> D[CodeBuddy Provider]
     A --> F[Pricing Engine]
     A --> G[Alert Engine]
+    A --> H[i18n - rust-i18n]
     C -->|ProviderEvent| B
     D -->|ProviderEvent| B
-    E -->|ProviderEvent| B
     style A fill:#89b4fa,color:#1e1e2e
     style B fill:#a6e3a1,color:#1e1e2e
     style F fill:#fab387,color:#1e1e2e
     style G fill:#f38ba8,color:#1e1e2e
+    style H fill:#cba6f7,color:#1e1e2e
 ```
 
 <br>
@@ -208,7 +233,8 @@ graph TD
 | 🖼️ | [ratatui](https://github.com/ratatui/ratatui) 0.29 | TUI framework with Chart, Gauge, built-in widgets |
 | 💻 | [crossterm](https://github.com/crossterm-rs/crossterm) 0.28 | Cross-platform terminal backend |
 | ⚡ | [tokio](https://tokio.rs/) | Async runtime for concurrent provider collection |
-| 👁️ | [notify](https://github.com/notify-rs/notify) 7 | File system watching for log tailing + config reload |
+| 👁️ | [notify](https://github.com/notify-rs/notify) 7 | File system watching for log tailing |
+| 🌐 | [rust-i18n](https://github.com/longbridgeapp/rust-i18n) 3 | Compile-time i18n with YAML translation files |
 | 📋 | [clap](https://github.com/clap-rs/clap) 4 | CLI argument parsing |
 | 📐 | [toml](https://github.com/toml-rs/toml) | Config file parsing |
 

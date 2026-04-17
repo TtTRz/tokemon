@@ -229,6 +229,7 @@ fn statusline_to_snapshot(data: &StatuslineData) -> Option<SessionSnapshot> {
         work_dir,
         status: SessionStatus::Active, // If statusline is sending data, it's active
         timestamp: Utc::now(),
+        subagent_count: 0,
     })
 }
 
@@ -334,6 +335,11 @@ struct SessionAccumulator {
     last_timestamp: Option<DateTime<Utc>>,
     turn_count: u64,
     total_duration_ms: u64,
+    subagent_count: usize,
+    /// Per-turn estimated cost accumulator (more accurate than post-hoc calculation)
+    per_turn_cost: f64,
+    /// Track the last model seen, for per-turn cost calculation
+    last_model: String,
 }
 
 impl SessionAccumulator {
@@ -350,6 +356,9 @@ impl SessionAccumulator {
             last_timestamp: None,
             turn_count: 0,
             total_duration_ms: 0,
+            subagent_count: 0,
+            per_turn_cost: 0.0,
+            last_model: String::new(),
         }
     }
 
@@ -375,12 +384,22 @@ impl SessionAccumulator {
         {
             if let Some(ref model) = msg.model {
                 self.model.clone_from(model);
+                self.last_model.clone_from(model);
             }
             if let Some(ref usage) = msg.usage {
                 self.total_input += usage.input_tokens;
                 self.total_output += usage.output_tokens;
                 self.total_cache_creation += usage.cache_creation_input_tokens;
                 self.total_cache_read += usage.cache_read_input_tokens;
+
+                // Per-turn cost: calculate cost for this single API call
+                self.per_turn_cost += crate::pricing::estimate_turn_cost_builtin(
+                    &self.last_model,
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.cache_creation_input_tokens,
+                    usage.cache_read_input_tokens,
+                );
             }
         }
 
@@ -405,21 +424,10 @@ impl SessionAccumulator {
             None
         };
 
-        // Status from last activity time
+        // Status: use shared inference + process-alive check
+        let process_alive = is_claude_session_alive(&self.session_id);
+        let status = super::infer_status(self.last_timestamp, process_alive);
         let now = Utc::now();
-        let status = match self.last_timestamp {
-            Some(ts) => {
-                let age = now.signed_duration_since(ts);
-                if age.num_seconds() < 60 {
-                    SessionStatus::Active
-                } else if age.num_minutes() < 10 {
-                    SessionStatus::Idle
-                } else {
-                    SessionStatus::Done
-                }
-            }
-            None => SessionStatus::Done,
-        };
 
         SessionSnapshot {
             session_id: self.session_id.clone(),
@@ -434,11 +442,17 @@ impl SessionAccumulator {
             context_window_pct: None,
             input_tps,
             output_tps,
-            cost_reported: None,
+            // Use per-turn accumulated cost (more accurate than post-hoc estimate)
+            cost_reported: if self.per_turn_cost > 0.0 {
+                Some(self.per_turn_cost)
+            } else {
+                None
+            },
             git_branch: self.git_branch.clone(),
             work_dir: self.cwd.clone(),
             status,
             timestamp: self.last_timestamp.unwrap_or(now),
+            subagent_count: self.subagent_count,
         }
     }
 }
@@ -467,7 +481,77 @@ fn parse_session_file(path: &Path) -> anyhow::Result<Option<SessionSnapshot>> {
         }
     }
 
+    // Merge subagent tokens into this session
+    if let Some(ref mut accumulator) = acc {
+        let session_id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let subagents_dir = path
+            .parent()
+            .unwrap_or(path)
+            .join(session_id)
+            .join("subagents");
+        if subagents_dir.is_dir() {
+            merge_subagent_tokens(accumulator, &subagents_dir);
+        }
+    }
+
     Ok(acc.filter(|a| !a.model.is_empty()).map(|a| a.to_snapshot()))
+}
+
+/// Scan subagent JSONL files and add their token usage to the parent accumulator.
+fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(subagents_dir) else {
+        return;
+    };
+
+    let mut count = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "jsonl") {
+            count += 1;
+            let Ok(content) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let entry: LogEntry = match serde_json::from_str(line) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                // Only accumulate token usage from assistant messages
+                if entry.entry_type == "assistant"
+                    && let Some(ref msg) = entry.message
+                    && let Some(ref usage) = msg.usage
+                {
+                    acc.total_input += usage.input_tokens;
+                    acc.total_output += usage.output_tokens;
+                    acc.total_cache_creation += usage.cache_creation_input_tokens;
+                    acc.total_cache_read += usage.cache_read_input_tokens;
+                    // Per-turn cost for subagent
+                    let model = msg.model.as_deref().unwrap_or(&acc.last_model);
+                    acc.per_turn_cost += crate::pricing::estimate_turn_cost_builtin(
+                        model,
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.cache_creation_input_tokens,
+                        usage.cache_read_input_tokens,
+                    );
+                }
+                // Update last_timestamp if subagent is more recent
+                if let Some(dt) = entry
+                    .timestamp
+                    .as_ref()
+                    .and_then(|ts| ts.parse::<DateTime<Utc>>().ok())
+                    && acc.last_timestamp.is_none_or(|prev| dt > prev)
+                {
+                    acc.last_timestamp = Some(dt);
+                }
+            }
+        }
+    }
+    acc.subagent_count = count;
 }
 
 fn scan_all_sessions(base_dir: &Path) -> anyhow::Result<Vec<SessionSnapshot>> {
@@ -532,15 +616,19 @@ async fn watch_logs(dir: PathBuf, tx: mpsc::Sender<ProviderEvent>) -> anyhow::Re
     loop {
         if let Some(path) = notify_rx.recv().await {
             let now = std::time::Instant::now();
+
+            // If this is a subagent JSONL, resolve to the parent session file
+            let parse_path = resolve_to_parent_session(&path);
+
             if last_parsed
-                .get(&path)
+                .get(&parse_path)
                 .is_some_and(|&last| now.duration_since(last) < debounce)
             {
                 continue;
             }
-            last_parsed.insert(path.clone(), now);
+            last_parsed.insert(parse_path.clone(), now);
 
-            match parse_session_file(&path) {
+            match parse_session_file(&parse_path) {
                 Ok(Some(snapshot)) => {
                     let _ = tx.send(ProviderEvent::Update(Box::new(snapshot))).await;
                 }
@@ -551,4 +639,51 @@ async fn watch_logs(dir: PathBuf, tx: mpsc::Sender<ProviderEvent>) -> anyhow::Re
             }
         }
     }
+}
+
+/// If a JSONL path is inside a `subagents/` directory, resolve it to the parent session JSONL.
+/// e.g. `.../projects/foo/SESSION_ID/subagents/agent-xxx.jsonl` → `.../projects/foo/SESSION_ID.jsonl`
+fn resolve_to_parent_session(path: &Path) -> PathBuf {
+    if let Some(parent) = path.parent()
+        && parent.file_name().is_some_and(|n| n == "subagents")
+        && let Some(session_dir) = parent.parent()
+        && let Some(session_id) = session_dir.file_name()
+        && let Some(project_dir) = session_dir.parent()
+    {
+        let parent_jsonl = project_dir.join(format!("{}.jsonl", session_id.to_string_lossy()));
+        if parent_jsonl.exists() {
+            return parent_jsonl;
+        }
+    }
+    path.to_path_buf()
+}
+
+/// Check if a Claude Code session is still alive by looking for its tmp directory.
+///
+/// Claude Code creates `/tmp/claude-{uid}/{project}/{session_id}/` while running.
+/// The directory is cleaned up when the session exits.
+fn is_claude_session_alive(session_id: &str) -> bool {
+    // SAFETY: getuid() is a POSIX syscall that always succeeds, has no side effects,
+    // and requires no preconditions. The unsafe block is only needed for FFI boundary.
+    let uid = unsafe { libc::getuid() };
+    let tmp = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp/".into());
+    let claude_tmp = PathBuf::from(tmp).join(format!("claude-{uid}"));
+
+    if !claude_tmp.exists() {
+        return false;
+    }
+
+    // Scan project dirs for a session_id match
+    let Ok(projects) = std::fs::read_dir(&claude_tmp) else {
+        return false;
+    };
+
+    for entry in projects.flatten() {
+        let session_dir = entry.path().join(session_id);
+        if session_dir.is_dir() {
+            return true;
+        }
+    }
+
+    false
 }

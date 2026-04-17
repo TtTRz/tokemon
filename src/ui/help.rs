@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use rust_i18n::t;
 
 /// Render the help popup overlay.
 pub fn render(frame: &mut Frame, area: Rect) {
@@ -18,7 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect) {
 
     let lines = vec![
         Line::from(Span::styled(
-            " tokemon — AI Tool Monitor",
+            format!(" {}", t!("help.subtitle")),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -26,43 +27,43 @@ pub fn render(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![
             Span::styled(" 1-9      ", Style::default().fg(Color::Yellow)),
-            Span::raw("Jump to tab (1=Overview)"),
+            Span::raw(t!("help.key_jump_tab").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" Tab      ", Style::default().fg(Color::Yellow)),
-            Span::raw("Next tab"),
+            Span::raw(t!("help.key_next_tab").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" S-Tab    ", Style::default().fg(Color::Yellow)),
-            Span::raw("Previous tab"),
+            Span::raw(t!("help.key_prev_tab").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" j/k ↑/↓  ", Style::default().fg(Color::Yellow)),
-            Span::raw("Move up/down (Overview)"),
+            Span::raw(t!("help.key_move_ud").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" h/l ←/→  ", Style::default().fg(Color::Yellow)),
-            Span::raw("Move left/right (Overview)"),
+            Span::raw(t!("help.key_move_lr").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" Enter    ", Style::default().fg(Color::Yellow)),
-            Span::raw("Open session tab"),
+            Span::raw(t!("help.key_open_session").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" Esc      ", Style::default().fg(Color::Yellow)),
-            Span::raw("Back to Overview"),
+            Span::raw(t!("help.key_back").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" ?        ", Style::default().fg(Color::Yellow)),
-            Span::raw("Toggle this help"),
+            Span::raw(t!("help.key_toggle_help").to_string()),
         ]),
         Line::from(vec![
             Span::styled(" q Ctrl+C ", Style::default().fg(Color::Yellow)),
-            Span::raw("Quit"),
+            Span::raw(t!("help.key_quit").to_string()),
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            " Press any key to close",
+            format!(" {}", t!("help.close_hint")),
             Style::default().fg(Color::DarkGray),
         )),
     ];
@@ -70,7 +71,7 @@ pub fn render(frame: &mut Frame, area: Rect) {
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
-                .title(" Help ")
+                .title(format!(" {} ", t!("help.title")))
                 .borders(Borders::ALL)
                 .style(Style::default().bg(Color::Black)),
         )

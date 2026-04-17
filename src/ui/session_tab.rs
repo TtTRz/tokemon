@@ -32,5 +32,5 @@ pub fn render(frame: &mut Frame, app: &App, session_id: &str, area: Rect) {
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
 
-    super::trend_chart::render_with_data(frame, token_data, cost_data, chunks[1]);
+    super::trend_chart::render_with_data(frame, token_data, cost_data, chunks[1], false);
 }

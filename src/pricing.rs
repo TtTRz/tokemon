@@ -14,10 +14,8 @@ pub struct ModelPricing {
 
 /// Engine that resolves model prices and estimates cost at render time.
 pub struct PricingEngine {
-    /// User overrides from config
-    user_overrides: HashMap<String, ModelPricing>,
-    /// Built-in defaults for well-known models
-    builtins: HashMap<String, ModelPricing>,
+    /// Model pricing from config (includes defaults + user overrides)
+    models: HashMap<String, ModelPricing>,
     /// Fallback for unknown models
     default_input: f64,
     default_output: f64,
@@ -25,9 +23,9 @@ pub struct PricingEngine {
 
 impl PricingEngine {
     pub fn new(config: &PricingConfig) -> Self {
-        let mut user_overrides = HashMap::new();
+        let mut models = HashMap::new();
         for (model, p) in &config.models {
-            user_overrides.insert(
+            models.insert(
                 model.clone(),
                 ModelPricing {
                     input_per_mtok: p.input,
@@ -39,20 +37,19 @@ impl PricingEngine {
         }
 
         Self {
-            user_overrides,
-            builtins: Self::builtin_prices(),
+            models,
             default_input: config.default_input,
             default_output: config.default_output,
         }
     }
 
-    /// Resolve pricing: user override > builtin > fallback.
+    /// Resolve pricing: exact match > prefix match > fallback.
     pub fn get_price(&self, model: &str) -> ModelPricing {
-        if let Some(p) = self.user_overrides.get(model) {
+        if let Some(p) = self.models.get(model) {
             return p.clone();
         }
-        // Try prefix match for builtins (e.g. "claude-sonnet-4" matches "claude-sonnet-4-*")
-        for (key, p) in &self.builtins {
+        // Try prefix match (e.g. "claude-sonnet-4" matches "claude-sonnet-4-20250514")
+        for (key, p) in &self.models {
             if model.starts_with(key) || key.starts_with(model) {
                 return p.clone();
             }
@@ -74,8 +71,11 @@ impl PricingEngine {
     pub fn estimate_cost(&self, snapshot: &SessionSnapshot) -> f64 {
         let pricing = self.get_price(&snapshot.model);
 
-        let total_cached = snapshot.cache_creation_tokens + snapshot.cache_read_tokens;
-        let non_cached_input = snapshot.input_tokens.saturating_sub(total_cached);
+        // Clamp total cached to input_tokens to avoid negative non_cached_input
+        // (can happen when merge() updates fields independently from different sources)
+        let total_cached = (snapshot.cache_creation_tokens + snapshot.cache_read_tokens)
+            .min(snapshot.input_tokens);
+        let non_cached_input = snapshot.input_tokens - total_cached;
 
         let input_cost = non_cached_input as f64 * pricing.input_per_mtok / 1_000_000.0;
         let output_cost = snapshot.output_tokens as f64 * pricing.output_per_mtok / 1_000_000.0;
@@ -89,72 +89,33 @@ impl PricingEngine {
             / 1_000_000.0;
         input_cost + output_cost + cache_write_cost + cache_read_cost
     }
+}
 
-    fn builtin_prices() -> HashMap<String, ModelPricing> {
-        let mut m = HashMap::new();
-        m.insert(
-            "claude-sonnet-4".into(),
-            ModelPricing {
-                input_per_mtok: 3.0,
-                output_per_mtok: 15.0,
-                cache_write_per_mtok: Some(3.75),
-                cache_read_per_mtok: Some(0.30),
-            },
-        );
-        m.insert(
-            "claude-4.6-opus".into(),
-            ModelPricing {
-                input_per_mtok: 5.0,
-                output_per_mtok: 25.0,
-                cache_write_per_mtok: Some(6.25),
-                cache_read_per_mtok: Some(0.50),
-            },
-        );
-        m.insert(
-            "claude-haiku-3.5".into(),
-            ModelPricing {
-                input_per_mtok: 0.80,
-                output_per_mtok: 4.0,
-                cache_write_per_mtok: Some(1.0),
-                cache_read_per_mtok: Some(0.08),
-            },
-        );
-        m.insert(
-            "o3".into(),
-            ModelPricing {
-                input_per_mtok: 10.0,
-                output_per_mtok: 40.0,
-                cache_write_per_mtok: None,
-                cache_read_per_mtok: None,
-            },
-        );
-        m.insert(
-            "gpt-4.1".into(),
-            ModelPricing {
-                input_per_mtok: 2.0,
-                output_per_mtok: 8.0,
-                cache_write_per_mtok: None,
-                cache_read_per_mtok: None,
-            },
-        );
-        m.insert(
-            "glm-5".into(),
-            ModelPricing {
-                input_per_mtok: 1.4,
-                output_per_mtok: 4.4,
-                cache_write_per_mtok: None,
-                cache_read_per_mtok: Some(0.475),
-            },
-        );
-        m.insert(
-            "glm-5.1".into(),
-            ModelPricing {
-                input_per_mtok: 1.4,
-                output_per_mtok: 4.4,
-                cache_write_per_mtok: None,
-                cache_read_per_mtok: Some(0.475),
-            },
-        );
-        m
-    }
+/// Estimate cost for a single API turn using builtin pricing (no PricingEngine instance needed).
+/// Used by providers during JSONL parsing when PricingEngine is not available.
+/// `input_tokens` includes cache tokens — we subtract them to get non-cached input.
+pub fn estimate_turn_cost_builtin(
+    model: &str,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_creation: u64,
+    cache_read: u64,
+) -> f64 {
+    // Resolve pricing from builtins (same data as PricingEngine::builtin_prices)
+    let engine = PricingEngine::new(&crate::config::PricingConfig::default());
+    let pricing = engine.get_price(model);
+
+    let total_cached = (cache_creation + cache_read).min(input_tokens);
+    let non_cached = input_tokens - total_cached;
+
+    let input_cost = non_cached as f64 * pricing.input_per_mtok / 1_000_000.0;
+    let output_cost = output_tokens as f64 * pricing.output_per_mtok / 1_000_000.0;
+    let write_cost = cache_creation as f64
+        * pricing
+            .cache_write_per_mtok
+            .unwrap_or(pricing.input_per_mtok)
+        / 1_000_000.0;
+    let read_cost = cache_read as f64 * pricing.cache_read_per_mtok.unwrap_or(0.0) / 1_000_000.0;
+
+    input_cost + output_cost + write_cost + read_cost
 }

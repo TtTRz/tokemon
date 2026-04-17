@@ -1,31 +1,17 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    symbols,
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Padding, Paragraph},
+    widgets::{Block, BorderType, Borders, Padding, Paragraph},
 };
 
+use super::pad_r;
+use super::shared::{ctx_color, fmt_speed, fmt_tok, label_col_width, render_status_badge};
+use super::theme::*;
 use crate::app::App;
 use crate::model::{SessionSnapshot, SessionStatus};
-
-// --- Catppuccin Mocha palette ---
-const BASE: Color = Color::Rgb(30, 30, 46);
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
-const OVERLAY0: Color = Color::Rgb(108, 112, 134);
-const SUBTEXT0: Color = Color::Rgb(166, 173, 200);
-const TEXT: Color = Color::Rgb(205, 214, 244);
-const BLUE: Color = Color::Rgb(137, 180, 250);
-const TEAL: Color = Color::Rgb(148, 226, 213);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const YELLOW: Color = Color::Rgb(249, 226, 175);
-const PEACH: Color = Color::Rgb(250, 179, 135);
-const RED: Color = Color::Rgb(243, 139, 168);
-const MAUVE: Color = Color::Rgb(203, 166, 247);
-const LAVENDER: Color = Color::Rgb(180, 190, 254);
-const SKY: Color = Color::Rgb(137, 220, 235);
+use rust_i18n::t;
 
 pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     let live: Vec<usize> = app
@@ -65,7 +51,7 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         area
     };
 
-    let card_height: u16 = 20;
+    let card_height: u16 = 21;
     let visible_rows = (cards_area.height / card_height).max(1) as usize;
     app.overview_visible_rows = visible_rows;
 
@@ -132,8 +118,11 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
 
         // Top hint: ▲ more above
         if has_above {
-            let hint = format!(" ▲ {} more above ", app.overview_scroll);
-            let hw = hint.len() as u16;
+            let hint = format!(
+                " {} ",
+                t!("overview.scroll_above", count = app.overview_scroll)
+            );
+            let hw = unicode_width::UnicodeWidthStr::width(hint.as_str()) as u16;
             let hx = area.x + (area.width.saturating_sub(hw)) / 2;
             let r = Rect::new(hx, area.y, hw, 1);
             frame.render_widget(
@@ -149,12 +138,15 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         if has_below {
             let remaining = rows_needed - app.overview_scroll - visible_rows;
             let hint = format!(
-                " ▼ {} more below  {}/{} ",
-                remaining,
-                app.overview_scroll + 1,
-                rows_needed,
+                " {} ",
+                t!(
+                    "overview.scroll_below",
+                    count = remaining,
+                    cur = app.overview_scroll + 1,
+                    total = rows_needed
+                )
             );
-            let hw = hint.len() as u16;
+            let hw = unicode_width::UnicodeWidthStr::width(hint.as_str()) as u16;
             let hx = area.x + (area.width.saturating_sub(hw)) / 2;
             let hy = area.y + area.height.saturating_sub(1);
             let r = Rect::new(hx, hy, hw, 1);
@@ -181,8 +173,8 @@ fn render_welcome(frame: &mut Frame, area: Rect) {
         "   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝",
     ];
 
-    let subtitle = "Token Monitor for AI Coding Tools";
-    let hint = "Waiting for sessions...";
+    let subtitle = t!("overview.welcome_subtitle").to_string();
+    let hint = t!("overview.welcome_waiting").to_string();
 
     // Total block height: logo(6) + blank(1) + subtitle(1) + blank(1) + hint(1) = 10
     let block_height: u16 = 10;
@@ -216,7 +208,7 @@ fn render_welcome(frame: &mut Frame, area: Rect) {
     // Subtitle
     let sub_y = y_offset + 7;
     if sub_y < area.y + area.height {
-        let sub_w = subtitle.len() as u16;
+        let sub_w = unicode_width::UnicodeWidthStr::width(subtitle.as_str()) as u16;
         let sub_x = area.x + area.width.saturating_sub(sub_w) / 2;
         let r = Rect::new(sub_x, sub_y, sub_w.min(area.width), 1);
         frame.render_widget(
@@ -231,7 +223,7 @@ fn render_welcome(frame: &mut Frame, area: Rect) {
     // Hint
     let hint_y = y_offset + 9;
     if hint_y < area.y + area.height {
-        let hint_w = hint.len() as u16;
+        let hint_w = unicode_width::UnicodeWidthStr::width(hint.as_str()) as u16;
         let hint_x = area.x + area.width.saturating_sub(hint_w) / 2;
         let r = Rect::new(hint_x, hint_y, hint_w.min(area.width), 1);
         frame.render_widget(
@@ -285,8 +277,8 @@ fn render_card(frame: &mut Frame, app: &App, idx: usize, selected: bool, area: R
         return;
     }
 
-    // 5 info rows (no spacers) + charts
-    let info_height = 5;
+    // 6 info rows (no spacers) + charts
+    let info_height = 6;
     let chart_height = inner.height.saturating_sub(info_height as u16).min(10);
     let has_chart = chart_height >= 3;
 
@@ -296,6 +288,7 @@ fn render_card(frame: &mut Frame, app: &App, idx: usize, selected: bool, area: R
         Constraint::Length(1), // row 2: in / out / cached
         Constraint::Length(1), // row 3: speed
         Constraint::Length(1), // row 4: cost
+        Constraint::Length(1), // row 5: dir
     ];
     if has_chart {
         constraints.push(Constraint::Min(3)); // charts
@@ -308,50 +301,76 @@ fn render_card(frame: &mut Frame, app: &App, idx: usize, selected: bool, area: R
 
     render_info_rows(frame, app, s, &rows);
 
-    if has_chart && rows.len() > 5 {
-        render_card_charts(frame, app, &s.session_id, rows[5]);
+    if has_chart && rows.len() > 6 {
+        let token_data = app
+            .session_token_series
+            .get(&s.session_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+        let cost_data = app
+            .session_cost_series
+            .get(&s.session_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+        super::trend_chart::render_with_data(frame, token_data, cost_data, rows[6], true);
     }
 }
 
 fn render_info_rows(frame: &mut Frame, app: &App, s: &SessionSnapshot, rows: &[Rect]) {
-    // Layout indices: 0=model, 1=ctx, 2=tokens, 3=speed, 4=cost
+    // Layout indices: 0=model, 1=ctx, 2=tokens, 3=speed, 4=cost, 5=dir
     let lbl = Style::default().fg(OVERLAY0);
     let sep = Span::styled(" · ", Style::default().fg(SURFACE1));
 
-    // Row 0: Model
-    let model_name = display_model(&s.model);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(pad_r("Model:", 8), lbl),
-            Span::styled(
-                model_name,
-                Style::default().fg(PEACH).add_modifier(Modifier::BOLD),
-            ),
-        ])),
-        rows[0],
-    );
+    // Compute dynamic label width for i18n
+    let lw = label_col_width(&[
+        &t!("label.model"),
+        &t!("label.ctx"),
+        &t!("label.in"),
+        &t!("label.out"),
+        &t!("label.cached"),
+        &t!("label.cost"),
+        &t!("label.est"),
+        &t!("label.total"),
+        &t!("label.dir"),
+    ]);
+
+    // Row 0: Model + subagent count
+    let mut model_spans = vec![
+        Span::styled(pad_r(&t!("label.model"), lw), lbl),
+        Span::styled(
+            s.model.clone(),
+            Style::default().fg(PEACH).add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if s.subagent_count > 0 {
+        model_spans.push(Span::styled(
+            format!("  ⑂ {}", t!("detail.subagents", count = s.subagent_count)),
+            Style::default().fg(OVERLAY0),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(model_spans)), rows[0]);
 
     // Row 1: Context bar
-    let ctx_spans = build_context_line(s, rows[1].width);
+    let ctx_spans = build_context_line(s, rows[1].width, lw);
     frame.render_widget(Paragraph::new(Line::from(ctx_spans)), rows[1]);
 
     // Row 2: In / Out / Cached
     let cached = s.cache_read_tokens + s.cache_creation_tokens;
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(pad_r("In:", 8), lbl),
+            Span::styled(pad_r(&t!("label.in"), lw), lbl),
             Span::styled(
                 pad_r(&fmt_tok(s.input_tokens), 10),
                 Style::default().fg(SKY),
             ),
             sep.clone(),
-            Span::styled(pad_r("Out:", 8), lbl),
+            Span::styled(pad_r(&t!("label.out"), lw), lbl),
             Span::styled(
                 pad_r(&fmt_tok(s.output_tokens), 10),
                 Style::default().fg(MAUVE),
             ),
             sep.clone(),
-            Span::styled(pad_r("Cached:", 8), lbl),
+            Span::styled(pad_r(&t!("label.cached"), lw), lbl),
             Span::styled(fmt_tok(cached), Style::default().fg(LAVENDER)),
         ])),
         rows[2],
@@ -369,13 +388,13 @@ fn render_info_rows(frame: &mut Frame, app: &App, s: &SessionSnapshot, rows: &[R
         .unwrap_or_else(|| "—".into());
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(pad_r("In:", 8), lbl),
+            Span::styled(pad_r(&t!("label.in"), lw), lbl),
             Span::styled(pad_r(&in_tps, 10), Style::default().fg(TEAL)),
             sep.clone(),
-            Span::styled(pad_r("Out:", 8), lbl),
+            Span::styled(pad_r(&t!("label.out"), lw), lbl),
             Span::styled(pad_r(&out_tps, 10), Style::default().fg(TEAL)),
             sep.clone(),
-            Span::styled(pad_r("Total:", 8), lbl),
+            Span::styled(pad_r(&t!("label.total"), lw), lbl),
             Span::styled(fmt_tok(total), Style::default().fg(TEXT)),
         ])),
         rows[3],
@@ -389,32 +408,42 @@ fn render_info_rows(frame: &mut Frame, app: &App, s: &SessionSnapshot, rows: &[R
         format!("~${est:.2}")
     };
     let mut spans = vec![
-        Span::styled(pad_r("Cost:", 8), lbl),
+        Span::styled(pad_r(&t!("label.cost"), lw), lbl),
         Span::styled(pad_r(&cost_str, 10), Style::default().fg(GREEN)),
     ];
     if s.cost_reported.is_some() {
         spans.push(sep);
-        spans.push(Span::styled(pad_r("Est:", 8), lbl));
+        spans.push(Span::styled(pad_r(&t!("label.est"), lw), lbl));
         spans.push(Span::styled(
             format!("${est:.2}"),
             Style::default().fg(OVERLAY0),
         ));
     }
     frame.render_widget(Paragraph::new(Line::from(spans)), rows[4]);
-}
 
-/// Right-pad a string to exactly `width` chars.
-fn pad_r(s: &str, width: usize) -> String {
-    if s.len() >= width {
-        s[..width].to_string()
-    } else {
-        format!("{s:<width$}")
+    // Row 5: Dir
+    if let Some(ref dir) = s.work_dir {
+        let dir_label = t!("label.dir").to_string();
+        let dir_label_w = unicode_width::UnicodeWidthStr::width(pad_r(&dir_label, lw).as_str());
+        let avail = (rows[5].width as usize).saturating_sub(dir_label_w);
+        let dir_display = if dir.len() <= avail || avail < 4 {
+            dir.clone()
+        } else {
+            format!("…{}", &dir[dir.len() - avail + 1..])
+        };
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(pad_r(&dir_label, lw), lbl),
+                Span::styled(dir_display, Style::default().fg(SUBTEXT0)),
+            ])),
+            rows[5],
+        );
     }
 }
 
-fn build_context_line(s: &SessionSnapshot, width: u16) -> Vec<Span<'static>> {
+fn build_context_line(s: &SessionSnapshot, width: u16, lw: usize) -> Vec<Span<'static>> {
     let mut spans = vec![Span::styled(
-        pad_r("Ctx:", 8),
+        pad_r(&t!("label.ctx"), lw),
         Style::default().fg(OVERLAY0),
     )];
 
@@ -463,142 +492,7 @@ fn build_context_line(s: &SessionSnapshot, width: u16) -> Vec<Span<'static>> {
         }
     }
 
-    // Append dir at end of ctx line
-    if let Some(ref dir) = s.work_dir {
-        let sep = Span::styled("  ·  ", Style::default().fg(SURFACE1));
-        spans.push(sep);
-        spans.push(Span::styled("Dir: ", Style::default().fg(OVERLAY0)));
-        // Truncate front if too long, keeping the meaningful tail
-        let used: usize = spans.iter().map(|s| s.width()).sum();
-        let avail = (width as usize).saturating_sub(used);
-        let dir_display = if dir.len() <= avail || avail < 4 {
-            dir.clone()
-        } else {
-            format!("…{}", &dir[dir.len() - avail + 1..])
-        };
-        spans.push(Span::styled(dir_display, Style::default().fg(SUBTEXT0)));
-    }
-
     spans
-}
-
-fn render_card_charts(frame: &mut Frame, app: &App, session_id: &str, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(area);
-
-    let token_data = app
-        .session_token_series
-        .get(session_id)
-        .map(|v| v.as_slice())
-        .unwrap_or(&[]);
-    let cost_data = app
-        .session_cost_series
-        .get(session_id)
-        .map(|v| v.as_slice())
-        .unwrap_or(&[]);
-
-    render_mini_chart(frame, token_data, "tokens", SKY, chunks[0]);
-    render_mini_chart(frame, cost_data, "cost", GREEN, chunks[1]);
-}
-
-fn render_mini_chart(
-    frame: &mut Frame,
-    data: &[(f64, f64)],
-    label: &str,
-    color: Color,
-    area: Rect,
-) {
-    let block = Block::default()
-        .title(Line::styled(
-            format!(" {label} "),
-            Style::default().fg(OVERLAY0),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(SURFACE0))
-        .style(Style::default().bg(BASE));
-
-    if data.is_empty() || area.height < 3 {
-        frame.render_widget(block, area);
-        return;
-    }
-
-    let x_min = data.first().map(|&(x, _)| x).unwrap_or(0.0);
-    let x_max = data.last().map(|&(x, _)| x).unwrap_or(1.0).max(x_min + 1.0);
-    let y_max = data
-        .iter()
-        .map(|&(_, y)| y)
-        .fold(0.0_f64, f64::max)
-        .max(0.001);
-
-    let datasets = vec![
-        Dataset::default()
-            .marker(symbols::Marker::Braille)
-            .graph_type(GraphType::Line)
-            .style(Style::default().fg(color))
-            .data(data),
-    ];
-
-    // Y-axis labels
-    let y_labels: Vec<Line> = vec![
-        Line::styled("0", Style::default().fg(SURFACE1)),
-        Line::styled(fmt_axis(y_max), Style::default().fg(OVERLAY0)),
-    ];
-
-    // X-axis labels: just show data point count
-    let chart = Chart::new(datasets)
-        .block(block)
-        .x_axis(
-            Axis::default()
-                .bounds([x_min, x_max])
-                .style(Style::default().fg(SURFACE0)),
-        )
-        .y_axis(
-            Axis::default()
-                .bounds([0.0, y_max * 1.1])
-                .labels(y_labels)
-                .style(Style::default().fg(SURFACE0)),
-        );
-
-    frame.render_widget(chart, area);
-}
-
-fn fmt_tok(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        format!("{n}")
-    }
-}
-
-fn fmt_speed(v: f64) -> String {
-    if v >= 1_000.0 {
-        format!("{:.1}k", v / 1_000.0)
-    } else if v >= 100.0 {
-        format!("{v:.0}")
-    } else {
-        format!("{v:.1}")
-    }
-}
-
-fn fmt_axis(n: f64) -> String {
-    if n >= 1_000_000.0 {
-        format!("{:.0}M", n / 1_000_000.0)
-    } else if n >= 1_000.0 {
-        format!("{:.0}k", n / 1_000.0)
-    } else if n < 1.0 {
-        format!("{n:.2}")
-    } else {
-        format!("{n:.0}")
-    }
-}
-
-fn display_model(model: &str) -> String {
-    model.to_string()
 }
 
 fn status_display(status: SessionStatus) -> (&'static str, Color) {
@@ -607,69 +501,5 @@ fn status_display(status: SessionStatus) -> (&'static str, Color) {
         SessionStatus::Idle => ("◑", YELLOW),
         SessionStatus::Done => ("✓", OVERLAY0),
         SessionStatus::Disconnected => ("✗", RED),
-    }
-}
-
-/// Render a rounded pill status badge at the top-right corner.
-/// Uses half-block chars (▐ ▌) to simulate radius on standard terminals.
-fn render_status_badge(frame: &mut Frame, status: SessionStatus, card_area: Rect) {
-    let (dot_color, label_color, label, pill_bg) = match status {
-        SessionStatus::Active => (
-            Color::Rgb(116, 199, 136), // bright dot
-            Color::Rgb(186, 230, 190), // bright text
-            "Active",
-            Color::Rgb(28, 48, 36), // deep green
-        ),
-        SessionStatus::Idle => (
-            Color::Rgb(229, 200, 120),
-            Color::Rgb(240, 220, 170),
-            "Idle",
-            Color::Rgb(48, 42, 24), // deep amber
-        ),
-        SessionStatus::Done => (
-            Color::Rgb(120, 200, 190),
-            Color::Rgb(170, 210, 206),
-            "Done",
-            Color::Rgb(30, 44, 46), // deep teal
-        ),
-        SessionStatus::Disconnected => (
-            Color::Rgb(220, 110, 130),
-            Color::Rgb(240, 160, 170),
-            "Offline",
-            Color::Rgb(52, 26, 32), // deep rose
-        ),
-    };
-
-    // ▐(fg=pill, bg=base) + content(bg=pill) + ▌(fg=pill, bg=base)
-    let pill_spans = vec![
-        Span::styled("\u{2590}", Style::default().fg(pill_bg).bg(BASE)), // ▐ left cap
-        Span::styled(" ● ", Style::default().fg(dot_color).bg(pill_bg)),
-        Span::styled(
-            format!("{label} "),
-            Style::default().fg(label_color).bg(pill_bg),
-        ),
-        Span::styled("\u{258C}", Style::default().fg(pill_bg).bg(BASE)), // ▌ right cap
-    ];
-
-    let badge_width: u16 = pill_spans.iter().map(|s| s.width() as u16).sum();
-
-    if badge_width + 3 > card_area.width {
-        return;
-    }
-
-    let x = card_area.x + card_area.width - badge_width - 1;
-    let y = card_area.y;
-    let badge_area = Rect::new(x, y, badge_width, 1);
-
-    frame.render_widget(Paragraph::new(Line::from(pill_spans)), badge_area);
-}
-
-fn ctx_color(pct: f64) -> Color {
-    if pct >= 95.0 {
-        RED
-    } else if pct >= 80.0 {
-        YELLOW
-    } else {
-        GREEN
     }
 }

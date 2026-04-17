@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::Frame;
+use rust_i18n::t;
 
 use crate::alert::AlertEngine;
 use crate::model::{Alert, SessionSnapshot, SessionStatus};
@@ -98,17 +99,23 @@ impl App {
             .collect()
     }
 
-    /// Sessions that are Done (shown in History tab).
+    /// Sessions that are Done (shown in History tab), sorted by time descending.
     pub fn done_sessions(&self) -> Vec<&SessionSnapshot> {
-        self.sessions
+        let mut sessions: Vec<&SessionSnapshot> = self
+            .sessions
             .iter()
             .filter(|s| matches!(s.status, SessionStatus::Done | SessionStatus::Disconnected))
-            .collect()
+            .collect();
+        sessions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        sessions
     }
 
     /// Ordered list of tab labels: Overview + History + live sessions.
     pub fn tab_labels(&self) -> Vec<String> {
-        let mut labels = vec!["Overview".into(), "History".into()];
+        let mut labels = vec![
+            t!("tab.overview").to_string(),
+            t!("tab.history").to_string(),
+        ];
         for s in self.live_sessions() {
             let id_short = &s.session_id[..s.session_id.len().min(6)];
             labels.push(format!("{} #{id_short}", s.provider));
@@ -220,6 +227,8 @@ impl App {
                 if is_new_session && tok_series.is_empty() && session_elapsed > 0.0 {
                     tok_series.push((0.0, total_tokens));
                 }
+                // Monotonic clamp: ensure cumulative values never decrease
+                let total_tokens = Self::monotonic_clamp(tok_series, total_tokens);
                 tok_series.push((session_elapsed, total_tokens));
                 Self::trim_series(tok_series, self.max_series_points);
 
@@ -230,6 +239,7 @@ impl App {
                 if is_new_session && cost_series.is_empty() && session_elapsed > 0.0 {
                     cost_series.push((0.0, cost));
                 }
+                let cost = Self::monotonic_clamp(cost_series, cost);
                 cost_series.push((session_elapsed, cost));
                 Self::trim_series(cost_series, self.max_series_points);
 
@@ -302,6 +312,28 @@ impl App {
         }
         if !all_alerts.is_empty() {
             self.alerts = all_alerts;
+        }
+    }
+
+    /// Clean up series data for sessions that have been Done/Disconnected for over 30 minutes.
+    /// The session itself stays in `self.sessions` (for History tab), but the time-series
+    /// data and start-time entry are freed to prevent unbounded memory growth.
+    pub fn cleanup_dead_sessions(&mut self) {
+        let now = Utc::now();
+        let stale_ids: Vec<String> = self
+            .sessions
+            .iter()
+            .filter(|s| {
+                matches!(s.status, SessionStatus::Done | SessionStatus::Disconnected)
+                    && now.signed_duration_since(s.timestamp).num_minutes() > 30
+            })
+            .map(|s| s.session_id.clone())
+            .collect();
+
+        for sid in &stale_ids {
+            self.session_token_series.remove(sid);
+            self.session_cost_series.remove(sid);
+            self.session_start_times.remove(sid);
         }
     }
 
@@ -448,6 +480,15 @@ impl App {
         }
     }
 
+    /// Ensure cumulative series value never decreases.
+    fn monotonic_clamp(series: &[(f64, f64)], value: f64) -> f64 {
+        if let Some(&(_, prev)) = series.last() {
+            value.max(prev)
+        } else {
+            value
+        }
+    }
+
     /// Add demo sessions for development/testing.
     pub fn add_demo_sessions(&mut self) {
         use crate::model::{SessionSnapshot, SessionStatus};
@@ -472,6 +513,7 @@ impl App {
                 work_dir: Some("~/projects/myapp".into()),
                 status: SessionStatus::Active,
                 timestamp: Utc::now(),
+                subagent_count: 3,
             },
             SessionSnapshot {
                 session_id: "d4e5f6".into(),
@@ -491,6 +533,7 @@ impl App {
                 work_dir: Some("~/projects/api".into()),
                 status: SessionStatus::Idle,
                 timestamp: Utc::now(),
+                subagent_count: 0,
             },
             SessionSnapshot {
                 session_id: "g7h8i9".into(),
@@ -510,6 +553,7 @@ impl App {
                 work_dir: Some("~/projects/backend".into()),
                 status: SessionStatus::Active,
                 timestamp: Utc::now(),
+                subagent_count: 1,
             },
             SessionSnapshot {
                 session_id: "j0k1l2".into(),
@@ -529,6 +573,7 @@ impl App {
                 work_dir: Some("~/projects/frontend".into()),
                 status: SessionStatus::Done,
                 timestamp: Utc::now(),
+                subagent_count: 2,
             },
         ];
 

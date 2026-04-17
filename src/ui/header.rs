@@ -1,23 +1,15 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
 };
 
+use super::pad_r;
+use super::theme::*;
 use crate::app::App;
-
-// Catppuccin Mocha
-const BASE: Color = Color::Rgb(30, 30, 46);
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
-const OVERLAY0: Color = Color::Rgb(108, 112, 134);
-const SUBTEXT0: Color = Color::Rgb(166, 173, 200);
-const BLUE: Color = Color::Rgb(137, 180, 250);
-const SKY: Color = Color::Rgb(137, 220, 235);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const LAVENDER: Color = Color::Rgb(180, 190, 254);
+use rust_i18n::t;
 
 /// 6-line header: 4-line ANSI Shadow logo + 1-line gap + 1-line tab bar.
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
@@ -74,24 +66,38 @@ fn render_logo(frame: &mut Frame, app: &App, area: Rect) {
     let tok_val = fmt_compact(total_tokens);
     let cost_val = format!("${total_cost:.2}");
     let cache_val = fmt_compact(total_cached);
-    let sess_val = format!("{active_count} active / {total_count} total");
+    let sess_val = t!(
+        "header.sessions_summary",
+        active = active_count,
+        total = total_count
+    )
+    .to_string();
 
     // Fixed-width: label(10) + value(right-aligned in 22 chars)
     let stat_lines: Vec<Vec<Span>> = vec![
         vec![
-            Span::styled("Tokens:   ", Style::default().fg(OVERLAY0)),
+            Span::styled(
+                pad_r(&t!("header.tokens"), 10),
+                Style::default().fg(OVERLAY0),
+            ),
             Span::styled(pad_r(&tok_val, 22), Style::default().fg(SKY)),
         ],
         vec![
-            Span::styled("Cost:     ", Style::default().fg(OVERLAY0)),
+            Span::styled(pad_r(&t!("header.cost"), 10), Style::default().fg(OVERLAY0)),
             Span::styled(pad_r(&cost_val, 22), Style::default().fg(GREEN)),
         ],
         vec![
-            Span::styled("Cached:   ", Style::default().fg(OVERLAY0)),
+            Span::styled(
+                pad_r(&t!("header.cached"), 10),
+                Style::default().fg(OVERLAY0),
+            ),
             Span::styled(pad_r(&cache_val, 22), Style::default().fg(LAVENDER)),
         ],
         vec![
-            Span::styled("Sessions: ", Style::default().fg(OVERLAY0)),
+            Span::styled(
+                pad_r(&t!("header.sessions"), 10),
+                Style::default().fg(OVERLAY0),
+            ),
             Span::styled(pad_r(&sess_val, 22), Style::default().fg(SUBTEXT0)),
         ],
     ];
@@ -186,13 +192,5 @@ fn fmt_compact(n: u64) -> String {
         format!("{:.1}k", n as f64 / 1_000.0)
     } else {
         format!("{n}")
-    }
-}
-
-fn pad_r(s: &str, width: usize) -> String {
-    if s.len() >= width {
-        s[..width].to_string()
-    } else {
-        format!("{s:<width$}")
     }
 }

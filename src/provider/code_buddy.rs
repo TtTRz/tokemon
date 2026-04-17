@@ -233,6 +233,7 @@ fn statusline_to_snapshot(data: &StatuslineData) -> Option<SessionSnapshot> {
         work_dir,
         status: SessionStatus::Active,
         timestamp: Utc::now(),
+        subagent_count: 0,
     })
 }
 
@@ -344,6 +345,7 @@ struct SessionAccumulator {
     total_cached: u64,
     cwd: Option<String>,
     last_timestamp: Option<DateTime<Utc>>,
+    subagent_count: usize,
 }
 
 impl SessionAccumulator {
@@ -356,6 +358,7 @@ impl SessionAccumulator {
             total_cached: 0,
             cwd: None,
             last_timestamp: None,
+            subagent_count: 0,
         }
     }
 
@@ -391,19 +394,7 @@ impl SessionAccumulator {
 
     fn to_snapshot(&self) -> SessionSnapshot {
         let now = Utc::now();
-        let status = match self.last_timestamp {
-            Some(ts) => {
-                let age = now.signed_duration_since(ts);
-                if age.num_seconds() < 60 {
-                    SessionStatus::Active
-                } else if age.num_minutes() < 10 {
-                    SessionStatus::Idle
-                } else {
-                    SessionStatus::Done
-                }
-            }
-            None => SessionStatus::Done,
-        };
+        let status = super::infer_status(self.last_timestamp, false);
 
         SessionSnapshot {
             session_id: self.session_id.clone(),
@@ -423,6 +414,7 @@ impl SessionAccumulator {
             work_dir: self.cwd.clone(),
             status,
             timestamp: self.last_timestamp.unwrap_or(now),
+            subagent_count: self.subagent_count,
         }
     }
 }
@@ -456,7 +448,68 @@ fn parse_session_file(path: &Path) -> anyhow::Result<Option<SessionSnapshot>> {
         }
     }
 
+    // Merge subagent tokens into this session
+    if let Some(ref mut accumulator) = acc {
+        let session_id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let subagents_dir = path
+            .parent()
+            .unwrap_or(path)
+            .join(session_id)
+            .join("subagents");
+        if subagents_dir.is_dir() {
+            merge_subagent_tokens(accumulator, &subagents_dir);
+        }
+    }
+
     Ok(acc.filter(|a| !a.model.is_empty()).map(|a| a.to_snapshot()))
+}
+
+/// Scan subagent JSONL files and add their token usage to the parent accumulator.
+fn merge_subagent_tokens(acc: &mut SessionAccumulator, subagents_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(subagents_dir) else {
+        return;
+    };
+
+    let mut count = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "jsonl") {
+            count += 1;
+            let Ok(content) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let entry: LogEntry = match serde_json::from_str(line) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                // Accumulate token usage from provider_data
+                if let Some(ref pd) = entry.provider_data
+                    && let Some(ref usage) = pd.usage
+                {
+                    acc.total_input += usage.input_tokens;
+                    acc.total_output += usage.output_tokens;
+                    for detail in &usage.input_tokens_details {
+                        acc.total_cached += detail.cached_tokens;
+                    }
+                }
+                // Update last_timestamp if subagent is more recent
+                if let Some(ts_ms) = entry.timestamp
+                    && let Some(dt) = Utc
+                        .timestamp_opt((ts_ms / 1000) as i64, ((ts_ms % 1000) * 1_000_000) as u32)
+                        .single()
+                    && acc.last_timestamp.is_none_or(|prev| dt > prev)
+                {
+                    acc.last_timestamp = Some(dt);
+                }
+            }
+        }
+    }
+    acc.subagent_count = count;
 }
 
 fn scan_all_sessions(base_dir: &Path) -> anyhow::Result<Vec<SessionSnapshot>> {
@@ -521,23 +574,43 @@ async fn watch_logs(dir: PathBuf, tx: mpsc::Sender<ProviderEvent>) -> anyhow::Re
     loop {
         if let Some(path) = notify_rx.recv().await {
             let now = std::time::Instant::now();
+
+            // If this is a subagent JSONL, resolve to the parent session file
+            let parse_path = resolve_to_parent_session(&path);
+
             if last_parsed
-                .get(&path)
+                .get(&parse_path)
                 .is_some_and(|&last| now.duration_since(last) < debounce)
             {
                 continue;
             }
-            last_parsed.insert(path.clone(), now);
+            last_parsed.insert(parse_path.clone(), now);
 
-            match parse_session_file(&path) {
+            match parse_session_file(&parse_path) {
                 Ok(Some(snapshot)) => {
                     let _ = tx.send(ProviderEvent::Update(Box::new(snapshot))).await;
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    tracing::warn!("Failed to re-parse {}: {e}", path.display());
+                    tracing::warn!("Failed to re-parse {}: {e}", parse_path.display());
                 }
             }
         }
     }
+}
+
+/// If a JSONL path is inside a `subagents/` directory, resolve it to the parent session JSONL.
+fn resolve_to_parent_session(path: &Path) -> PathBuf {
+    if let Some(parent) = path.parent()
+        && parent.file_name().is_some_and(|n| n == "subagents")
+        && let Some(session_dir) = parent.parent()
+        && let Some(session_id) = session_dir.file_name()
+        && let Some(project_dir) = session_dir.parent()
+    {
+        let parent_jsonl = project_dir.join(format!("{}.jsonl", session_id.to_string_lossy()));
+        if parent_jsonl.exists() {
+            return parent_jsonl;
+        }
+    }
+    path.to_path_buf()
 }

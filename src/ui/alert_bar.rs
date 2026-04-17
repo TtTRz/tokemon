@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use rust_i18n::t;
 
 use crate::app::App;
 
@@ -28,7 +29,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::styled(format!("{alert}"), Style::default().fg(color)));
     }
 
-    let keys = "1-9 tabs · j/k nav · Enter open · Esc back · ? help · q quit";
+    let keys = t!("alert.keys").to_string();
     let left_len: usize = spans.iter().map(|s| s.width()).sum();
     let right_len = keys.len() + 2;
     let padding = area

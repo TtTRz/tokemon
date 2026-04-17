@@ -1,11 +1,11 @@
 [package]
 name = "tokemon"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2024"
 description = "Token Monitor — Terminal dashboard for monitoring AI coding tools (Claude Code, Codex, CodeBuddy)"
 license = "MIT"
 repository = "https://github.com/TtTRz/tokemon"
-authors = ["TtTRz"]
+authors = ["TtTRz <romc1224@gmail.com>"]
 keywords = ["tui", "monitor", "ai", "token", "dashboard"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
@@ -28,3 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 anyhow = "1"
 shellexpand = "3"
+rust-i18n = "3"
+unicode-width = "0.2"
+sys-locale = "0.3"
+libc = "0.2"

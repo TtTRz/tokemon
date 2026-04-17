@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use rust_i18n::t;
+
 /// Snapshot of a single session at a point in time.
 /// This is the unified data model all providers produce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +24,8 @@ pub struct SessionSnapshot {
     pub work_dir: Option<String>,
     pub status: SessionStatus,
     pub timestamp: DateTime<Utc>,
+    /// Number of subagent JSONL files in this session
+    pub subagent_count: usize,
 }
 
 impl SessionSnapshot {
@@ -73,6 +77,8 @@ impl SessionSnapshot {
         if other.work_dir.is_some() {
             self.work_dir.clone_from(&other.work_dir);
         }
+        // Subagent count: always take the latest value
+        self.subagent_count = self.subagent_count.max(other.subagent_count);
     }
 }
 
@@ -87,10 +93,10 @@ pub enum SessionStatus {
 impl std::fmt::Display for SessionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Active => write!(f, "Active"),
-            Self::Idle => write!(f, "Idle"),
-            Self::Done => write!(f, "Done"),
-            Self::Disconnected => write!(f, "Disconnected"),
+            Self::Active => write!(f, "{}", t!("status.active")),
+            Self::Idle => write!(f, "{}", t!("status.idle")),
+            Self::Done => write!(f, "{}", t!("status.done")),
+            Self::Disconnected => write!(f, "{}", t!("status.disconnected")),
         }
     }
 }
@@ -122,18 +128,44 @@ impl std::fmt::Display for Alert {
                 provider,
                 pct,
             } => {
-                write!(f, "{provider}#{session_id} context {pct:.0}%")
+                write!(
+                    f,
+                    "{}",
+                    t!(
+                        "alert.context_high",
+                        provider = provider,
+                        session_id = &session_id[..session_id.len().min(6)],
+                        pct = format!("{pct:.0}")
+                    )
+                )
             }
             Self::CostThreshold {
                 session_id,
                 cost,
                 threshold,
             } => {
-                write!(f, "#{session_id} cost ${cost:.2} exceeds ${threshold:.2}")
+                write!(
+                    f,
+                    "{}",
+                    t!(
+                        "alert.cost_threshold",
+                        session_id = &session_id[..session_id.len().min(6)],
+                        cost = format!("{cost:.2}"),
+                        threshold = format!("{threshold:.2}")
+                    )
+                )
             }
             Self::ProviderDisconnected { provider, error } => {
                 let msg = error.as_deref().unwrap_or("unknown");
-                write!(f, "{provider} disconnected: {msg}")
+                write!(
+                    f,
+                    "{}",
+                    t!(
+                        "alert.provider_disconnected",
+                        provider = provider,
+                        error = msg
+                    )
+                )
             }
         }
     }

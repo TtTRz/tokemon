@@ -1,0 +1,78 @@
+_version: 1
+
+# Shared labels
+label.model: "Model:"
+label.ctx: "Context:"
+label.in: "In:"
+label.out: "Out:"
+label.cached: "Cached:"
+label.cost: "Cost:"
+label.dir: "Dir:"
+label.est: "Est:"
+label.total: "Total:"
+label.branch: "Branch:"
+label.speed: "Speed:"
+
+# Status
+status.active: "Active"
+status.idle: "Idle"
+status.done: "Done"
+status.offline: "Offline"
+status.disconnected: "Disconnected"
+
+# Overview
+overview.welcome_subtitle: "Token Monitor for AI Coding Tools"
+overview.welcome_waiting: "Waiting for sessions..."
+overview.scroll_above: "▲ %{count} more above"
+overview.scroll_below: "▼ %{count} more below  %{cur}/%{total}"
+overview.session_not_found: "Session not found"
+
+# Header
+header.tokens: "Tokens:"
+header.cost: "Cost:"
+header.cached: "Cached:"
+header.sessions: "Sessions:"
+header.sessions_summary: "%{active} active / %{total} total"
+
+# Tabs
+tab.overview: "Overview"
+tab.history: "History"
+
+# Help
+help.title: "Help"
+help.subtitle: "tokemon — AI Tool Monitor"
+help.key_jump_tab: "Jump to tab (1=Overview)"
+help.key_next_tab: "Next tab"
+help.key_prev_tab: "Previous tab"
+help.key_move_ud: "Move up/down (Overview)"
+help.key_move_lr: "Move left/right (Overview)"
+help.key_open_session: "Open session tab"
+help.key_back: "Back to Overview"
+help.key_toggle_help: "Toggle this help"
+help.key_quit: "Quit"
+help.close_hint: "Press any key to close"
+
+# History
+history.title: "History"
+history.sessions_count: "%{count} sessions"
+history.empty: "No completed sessions yet."
+history.col_provider: "Provider"
+history.col_session: "Session"
+history.col_model: "Model"
+history.col_in: "In"
+history.col_out: "Out"
+history.col_cost: "Cost"
+history.col_dir: "Dir"
+history.col_time: "Time"
+
+# Detail
+detail.title: "Detail"
+detail.chart_tokens: "Tokens"
+detail.chart_cost: "Cost"
+detail.subagents: "%{count} subagents"
+
+# Alert bar
+alert.keys: "1-9 tabs · j/k nav · Enter open · Esc back · ? help · q quit"
+alert.context_high: "%{provider}#%{session_id} context %{pct}%%"
+alert.cost_threshold: "#%{session_id} cost $%{cost} exceeds $%{threshold}"
+alert.provider_disconnected: "%{provider} disconnected: %{error}"

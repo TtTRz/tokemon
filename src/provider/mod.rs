@@ -1,7 +1,8 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
-use crate::model::SessionSnapshot;
+use crate::model::{SessionSnapshot, SessionStatus};
 
 /// Capabilities a provider declares — UI uses this to decide what to show.
 #[allow(dead_code)]
@@ -48,6 +49,42 @@ pub trait Provider: Send + Sync {
 
     /// Stop collecting and clean up.
     async fn stop(&self) -> anyhow::Result<()>;
+}
+
+// ============================================================
+// Shared status inference
+// ============================================================
+
+/// Infer session status from the last activity timestamp.
+///
+/// Thresholds:
+///   < 5 min  → Active
+///   5–30 min → Idle
+///   > 30 min → Done
+///
+/// If `process_alive` is true (e.g. Claude Code process still running),
+/// the status is clamped to at least Idle — never Done while the process exists.
+pub fn infer_status(last_activity: Option<DateTime<Utc>>, process_alive: bool) -> SessionStatus {
+    let status = match last_activity {
+        Some(ts) => {
+            let age = Utc::now().signed_duration_since(ts);
+            if age.num_minutes() < 5 {
+                SessionStatus::Active
+            } else if age.num_minutes() < 30 {
+                SessionStatus::Idle
+            } else {
+                SessionStatus::Done
+            }
+        }
+        None => SessionStatus::Done,
+    };
+
+    // Process-alive boost: at least Idle if process is still running
+    if process_alive && status == SessionStatus::Done {
+        SessionStatus::Idle
+    } else {
+        status
+    }
 }
 
 pub mod claude_code;

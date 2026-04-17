@@ -1,13 +1,13 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
+    style::Style,
     widgets::Block,
 };
 
+use super::theme::BASE;
 use crate::app::{ActiveTab, App};
-
-const BASE: Color = Color::Rgb(30, 30, 46);
+use crate::model::SessionStatus;
 
 /// Render the entire UI.
 pub fn render(frame: &mut Frame, app: &mut App) {
@@ -16,8 +16,13 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // Fill entire area with base background
     frame.render_widget(Block::default().style(Style::default().bg(BASE)), size);
 
-    if app.sessions.is_empty() {
-        // No sessions: full-screen welcome (overview handles it), no header/footer
+    let has_live = app
+        .sessions
+        .iter()
+        .any(|s| matches!(s.status, SessionStatus::Active | SessionStatus::Idle));
+
+    if !has_live && app.active_tab == ActiveTab::Overview {
+        // No live sessions on overview: full-screen welcome, no header/footer
         super::overview::render(frame, app, size);
         return;
     }

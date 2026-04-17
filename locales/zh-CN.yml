@@ -1,0 +1,78 @@
+_version: 1
+
+# Shared labels
+label.model: "模型:"
+label.ctx: "上下文:"
+label.in: "输入:"
+label.out: "输出:"
+label.cached: "缓存:"
+label.cost: "费用:"
+label.dir: "目录:"
+label.est: "估算:"
+label.total: "合计:"
+label.branch: "分支:"
+label.speed: "速度:"
+
+# Status
+status.active: "运行中"
+status.idle: "空闲"
+status.done: "已完成"
+status.offline: "离线"
+status.disconnected: "已断开"
+
+# Overview
+overview.welcome_subtitle: "AI 编程工具 Token 监控器"
+overview.welcome_waiting: "等待会话连接..."
+overview.scroll_above: "▲ 上方还有 %{count} 项"
+overview.scroll_below: "▼ 下方还有 %{count} 项  %{cur}/%{total}"
+overview.session_not_found: "未找到会话"
+
+# Header
+header.tokens: "Token:"
+header.cost: "费用:"
+header.cached: "缓存:"
+header.sessions: "会话:"
+header.sessions_summary: "%{active} 活跃 / %{total} 总计"
+
+# Tabs
+tab.overview: "概览"
+tab.history: "历史"
+
+# Help
+help.title: "帮助"
+help.subtitle: "tokemon — AI 工具监控器"
+help.key_jump_tab: "跳转到标签 (1=概览)"
+help.key_next_tab: "下一个标签"
+help.key_prev_tab: "上一个标签"
+help.key_move_ud: "上下移动 (概览)"
+help.key_move_lr: "左右移动 (概览)"
+help.key_open_session: "打开会话标签"
+help.key_back: "返回概览"
+help.key_toggle_help: "切换帮助面板"
+help.key_quit: "退出"
+help.close_hint: "按任意键关闭"
+
+# History
+history.title: "历史"
+history.sessions_count: "%{count} 个会话"
+history.empty: "暂无已完成的会话。"
+history.col_provider: "提供者"
+history.col_session: "会话"
+history.col_model: "模型"
+history.col_in: "输入"
+history.col_out: "输出"
+history.col_cost: "费用"
+history.col_dir: "目录"
+history.col_time: "时间"
+
+# Detail
+detail.title: "详情"
+detail.chart_tokens: "Token"
+detail.chart_cost: "费用"
+detail.subagents: "%{count} 个子代理"
+
+# Alert bar
+alert.keys: "1-9 标签 · j/k 导航 · Enter 打开 · Esc 返回 · ? 帮助 · q 退出"
+alert.context_high: "%{provider}#%{session_id} 上下文 %{pct}%%"
+alert.cost_threshold: "#%{session_id} 费用 $%{cost} 超过 $%{threshold}"
+alert.provider_disconnected: "%{provider} 已断开: %{error}"

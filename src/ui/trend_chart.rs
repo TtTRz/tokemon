@@ -1,38 +1,77 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::Style,
     symbols,
     text::Line,
     widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType},
 };
+use rust_i18n::t;
 
-// Catppuccin Mocha
-const BASE: Color = Color::Rgb(30, 30, 46);
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
-const OVERLAY0: Color = Color::Rgb(108, 112, 134);
-const SKY: Color = Color::Rgb(137, 220, 235);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const TEXT: Color = Color::Rgb(205, 214, 244);
+use super::theme::*;
 
-/// Render token rate + cost charts from given data slices.
+/// Render a pair of token + cost charts stacked vertically.
+/// `compact` = true uses 2 Y-axis labels (for overview cards), false uses 3 (for detail).
 pub fn render_with_data(
     frame: &mut Frame,
     token_data: &[(f64, f64)],
     cost_data: &[(f64, f64)],
     area: Rect,
+    compact: bool,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    render_chart(frame, token_data, " Token Rate ", SKY, chunks[0]);
-    render_chart(frame, cost_data, " Cumulative Cost ", GREEN, chunks[1]);
+    let y_max_tok = y_max_of(token_data);
+    let y_max_cost = y_max_of(cost_data);
+
+    // Compute unified Y-axis label width so both charts align
+    let label_w = if compact {
+        format_y(y_max_tok)
+            .len()
+            .max(format_y(y_max_cost).len())
+            .max(1)
+    } else {
+        [
+            format_y(y_max_tok).len(),
+            format_y(y_max_tok / 2.0).len(),
+            format_y(y_max_cost).len(),
+            format_y(y_max_cost / 2.0).len(),
+            1,
+        ]
+        .into_iter()
+        .max()
+        .unwrap()
+    };
+
+    let tok_title = format!(" {} ", t!("detail.chart_tokens"));
+    let cost_title = format!(" {} ", t!("detail.chart_cost"));
+
+    render_chart(
+        frame, token_data, &tok_title, SKY, chunks[0], label_w, compact,
+    );
+    render_chart(
+        frame,
+        cost_data,
+        &cost_title,
+        GREEN,
+        chunks[1],
+        label_w,
+        compact,
+    );
 }
 
-fn render_chart(frame: &mut Frame, data: &[(f64, f64)], title: &str, color: Color, area: Rect) {
+fn render_chart(
+    frame: &mut Frame,
+    data: &[(f64, f64)],
+    title: &str,
+    color: Color,
+    area: Rect,
+    y_label_width: usize,
+    compact: bool,
+) {
     let block = Block::default()
         .title(Line::styled(title, Style::default().fg(OVERLAY0)))
         .borders(Borders::ALL)
@@ -40,18 +79,14 @@ fn render_chart(frame: &mut Frame, data: &[(f64, f64)], title: &str, color: Colo
         .border_style(Style::default().fg(SURFACE1))
         .style(Style::default().bg(BASE));
 
-    if data.is_empty() {
+    if data.is_empty() || area.height < 3 {
         frame.render_widget(block, area);
         return;
     }
 
     let x_min = data.first().map(|&(x, _)| x).unwrap_or(0.0);
     let x_max = data.last().map(|&(x, _)| x).unwrap_or(1.0).max(x_min + 1.0);
-    let y_max = data
-        .iter()
-        .map(|&(_, y)| y)
-        .fold(0.0_f64, f64::max)
-        .max(0.001);
+    let y_max = y_max_of(data);
 
     let datasets = vec![
         Dataset::default()
@@ -61,11 +96,28 @@ fn render_chart(frame: &mut Frame, data: &[(f64, f64)], title: &str, color: Colo
             .data(data),
     ];
 
-    let y_labels: Vec<Line> = vec![
-        Line::styled("0", Style::default().fg(SURFACE1)),
-        Line::styled(format_y(y_max / 2.0), Style::default().fg(OVERLAY0)),
-        Line::styled(format_y(y_max), Style::default().fg(TEXT)),
-    ];
+    let w = y_label_width;
+    let y_labels: Vec<Line> = if compact {
+        vec![
+            Line::styled(format!("{:>w$}", "0"), Style::default().fg(SURFACE1)),
+            Line::styled(
+                format!("{:>w$}", format_y(y_max)),
+                Style::default().fg(OVERLAY0),
+            ),
+        ]
+    } else {
+        vec![
+            Line::styled(format!("{:>w$}", "0"), Style::default().fg(SURFACE1)),
+            Line::styled(
+                format!("{:>w$}", format_y(y_max / 2.0)),
+                Style::default().fg(OVERLAY0),
+            ),
+            Line::styled(
+                format!("{:>w$}", format_y(y_max)),
+                Style::default().fg(TEXT),
+            ),
+        ]
+    };
 
     let chart = Chart::new(datasets)
         .block(block)
@@ -82,6 +134,13 @@ fn render_chart(frame: &mut Frame, data: &[(f64, f64)], title: &str, color: Colo
         );
 
     frame.render_widget(chart, area);
+}
+
+fn y_max_of(data: &[(f64, f64)]) -> f64 {
+    data.iter()
+        .map(|&(_, y)| y)
+        .fold(0.0_f64, f64::max)
+        .max(0.001)
 }
 
 fn format_y(n: f64) -> String {
